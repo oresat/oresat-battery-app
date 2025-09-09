@@ -1,6 +1,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/console/console.h>
 #include <canopennode.h>
 #include <OD.h>
 #include <oresat.h>
@@ -191,40 +192,46 @@ typedef struct {
     bool is_data_valid;
 
     uint32_t batt_mV;
-    uint16_t v_cell_1_mV;
-    uint16_t v_cell_2_mV;
-    uint16_t v_cell_mV;
-    uint16_t v_cell_avg_mV;
     uint16_t v_cell_max_volt_mV;
     uint16_t v_cell_min_volt_mV;
+    uint16_t v_cell_mV;
+    uint16_t v_cell_1_mV;
+    uint16_t v_cell_2_mV;
+    uint16_t v_cell_avg_mV;
 
     int32_t current_mA;
     int32_t avg_current_mA;
     int32_t max_current_mA;
     int32_t min_current_mA;
 
-    uint8_t available_state_of_charge; //Percent
-    uint8_t present_state_of_charge; //Percent
-    uint8_t reported_state_of_charge; //Percent
-
-    uint32_t time_to_full_seconds;
-    uint32_t time_to_empty_seconds;
-
     uint32_t full_capacity_mAh;
+    uint32_t reported_capacity_mAh;
+
+    // the next 2 are not reported over CAN
     uint32_t available_capacity_mAh;
     uint32_t mix_capacity_mAh;
-    uint32_t reported_capacity_mAh;
+
+    uint32_t time_to_empty_seconds;
+    uint32_t time_to_full_seconds;
 
     uint16_t cycles; // count
 
+    uint8_t reported_state_of_charge; //Percent
+
+    // the next 2 are not reported over CAN
+    uint8_t available_state_of_charge; //Percent
+    uint8_t present_state_of_charge; //Percent
+
+    int16_t int_temp_C;
+    int16_t avg_int_temp_C;
+    int8_t temp_max_C;
+    int8_t temp_min_C;
+
+    // the next 4 are not reported over CAN
     int16_t temp_1_C;
     int16_t temp_2_C;
-    int16_t int_temp_C;
     int16_t avg_temp_1_C;
     int16_t avg_temp_2_C;
-    int16_t avg_int_temp_C;
-    int8_t temp_min_C;
-    int8_t temp_max_C;
 } batt_pack_data_t;
 
 #if ENABLE_HEATERS
@@ -418,10 +425,10 @@ static bool store_current_batt_hist(void)
     uint16_t tmp;
 
 #if HIST_STORE_PROMPT
-    uint8_t ch = 0;
 
     LOG_DBG("********** Store batt_hist e(rase), y(es), n(o)? ");
-    sdReadTimeout(DEBUG_SD, &ch, 1, TIME_S2I(3)); // wait for input but timeout
+    uint8_t ch = console_getchar(); // TODO: Zephyr console does not have a read timeout; switch to shell
+
     LOG_DBG("");
     if (ch == 'e') {
         LOG_DBG("Erasing *************");
@@ -631,7 +638,7 @@ static bool populate_pack_data(MAX17205Driver *driver, batt_pack_data_t *dest) {
     }
 
     /* Record pack and cell voltages to object dictionary */
-    if( (r = max17205ReadVoltage(driver, MAX17205_AD_AVGCELL1, &dest->v_cell_1_mV)) != MSG_OK ) {
+    if( (r = max17205ReadVoltage(driver, MAX17205_AD_CELL1, &dest->v_cell_1_mV)) != MSG_OK ) {
         dest->is_data_valid = false;
     }
 
@@ -793,8 +800,8 @@ static bool prompt_nv_write(MAX17205Driver *devp, const char *pack_str) {
     if (num_writes_left > 0) {
         // Answer n to just use the changes in the volatile registers
         LOG_DBG("Write NV memory on MAX17205 for %s ? y/n? ", pack_str);
-        uint8_t ch = 0;
-        sdReadTimeout(DEBUG_SD, &ch, 1, TIME_S2I(NV_WRITE_PROMPT_TIMEOUT_S)); // wait for input but timeout
+        uint8_t ch = console_getchar(); // TODO: Zephyr console does not have a read timeout; switch to shell
+
         LOG_DBG("");
 
         if (ch == 'y') {
@@ -919,8 +926,8 @@ static void populate_od_pack_data(pack_t *pack) {
         OD_RAM.x4000_pack_1.reported_state_of_charge = pack_data->reported_state_of_charge;
         OD_RAM.x4000_pack_1.temperature = CLAMP(pack_data->temp_1_C, INT8_MIN, INT8_MAX);
         OD_RAM.x4000_pack_1.temperature_avg = CLAMP(pack_data->avg_temp_1_C, INT8_MIN, INT8_MAX);
-        OD_RAM.x4000_pack_1.temperature_min = pack_data->temp_min_C;
         OD_RAM.x4000_pack_1.temperature_max = pack_data->temp_max_C;
+        OD_RAM.x4000_pack_1.temperature_min = pack_data->temp_min_C;
     } else if (pack->pack_number == 2) {
         OD_RAM.x4001_pack_2.status = state_bitmask;
         OD_RAM.x4001_pack_2.vbatt = MIN(pack_data->batt_mV, UINT16_MAX);
@@ -942,8 +949,8 @@ static void populate_od_pack_data(pack_t *pack) {
         OD_RAM.x4001_pack_2.reported_state_of_charge = pack_data->reported_state_of_charge;
         OD_RAM.x4001_pack_2.temperature = CLAMP(pack_data->temp_1_C, INT8_MIN, INT8_MAX);
         OD_RAM.x4001_pack_2.temperature_avg = CLAMP(pack_data->avg_temp_1_C, INT8_MIN, INT8_MAX);
-        OD_RAM.x4001_pack_2.temperature_min = pack_data->temp_min_C;
         OD_RAM.x4001_pack_2.temperature_max = pack_data->temp_max_C;
+        OD_RAM.x4001_pack_2.temperature_min = pack_data->temp_min_C;
     } else {
         LOG_DBG("ERROR: pack number not expected: %d", pack->pack_number);
     }
@@ -1036,6 +1043,8 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
         k_sleep(sys_timepoint_timeout(timepoint));
     }
 #endif
+
+    console_init();
 
 #if VERBOSE_DEBUG
     print_batt_hist();
