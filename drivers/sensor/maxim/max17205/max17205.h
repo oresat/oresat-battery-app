@@ -9,10 +9,6 @@
 
 #include <zephyr/drivers/i2c.h>
 
-#define VOLTAGE_MULTIPLIER_UV	1250 / 16
-#define CURRENT_MULTIPLIER_NA	156250
-#define TIME_MULTIPLIER_MS	5625
-
 #define MAX17205_T_RECAL_MS      5
 //tBlock(max) is specified as 7360ms in the data sheet, page 16
 #define MAX17205_T_BLOCK_MS      8000
@@ -210,6 +206,7 @@ enum {
     MAX17205_AD_NDEVICENAME2 = 0x1DDU,
     MAX17205_AD_NDEVICENAME3 = 0x1DEU,
     MAX17205_AD_NDEVICENAME4 = 0x1DFU,
+	MAX17205_AD_MAXVALUE = 0x1FFU
 };
 
 /**
@@ -1025,6 +1022,7 @@ enum max17205_channel {
 	MAX17205_CHAN_AVAILABLE_SOC,
 	MAX17205_CHAN_PRESENT_SOC,
 	MAX17205_CHAN_REPORTED_SOC,
+	MAX17205_CHAN_LEARN_STAGE,
 	// SENSOR_CHAN_GAUGE_CYCLE_COUNT
 };
 
@@ -1032,14 +1030,25 @@ enum max17205_attribute {
     MAX17205_ATTR_START = SENSOR_ATTR_PRIV_START,
     // place misc. attributes here
 
-	MAX17205_ADDR_HW_RESET,
-	MAX17205_ADDR_FW_RESET,
+	MAX17205_ATTR_HW_RESET,
+	MAX17205_ATTR_FW_RESET,
+	/* Read and write capacity value for specified channel, in mAh, via val->val1. */
+	MAX17205_ATTR_CAPACITY,
+	/* Read and write the learning stage (0-7); set val->val1 to stage. */
+	MAX17205_ATTR_LEARN_STAGE,
+	/* Read number of NV writes left for register set (0-7). */
+	MAX17205_ATTR_NV_WRITES_LEFT,
+	/* Program the NV registers as currently set (if any writes remain).
+	 * Takes up to 8 seconds to complete.
+	 */
+	MAX17205_ATTR_NV_BLOCK_PROGRAM,
 
+    /* Add MAX17205_ATTR_REGS with register address to get attribute to read/write
+	 * a specific register, e.g. MAX17205_ATTR_REGS + MAX17205_AD_LEARNCFG.
+	 */
     MAX17205_ATTR_REGS = MAX17205_ATTR_START + 0x100,
-    // add MAX17205_ATTR_REGS with register address to get attribute to read/write
-    // a specific register, e.g. MAX17205_ATTR_REGS + MAX17205_AD_LEARNCFG
+	MAX17205_ATTR_REGS_END = MAX17205_ATTR_REGS + MAX17205_AD_MAXVALUE
 };
-
 
 struct max17205_data {
 	/* Raw register values */
@@ -1072,27 +1081,31 @@ struct max17205_data {
 	uint16_t present_soc;   // MAX17205_CHAN_PRESENT_SOC,
 	uint16_t reported_soc;  // MAX17205_CHAN_REPORTED_SOC,
 	uint16_t cycle_count;   // SENSOR_CHAN_GAUGE_CYCLE_COUNT,
+	uint16_t learn_stage;   // MAX17205_CHAN_LEARN_STAGE
 };
+
+// TODO put this in the device tree in the pack_flags field
+#define MAX17205_PACKCFG_VAL = (MAX17205_PACKCFG_BTEN | // enable Vbatt channel
+                                MAX17205_PACKCFG_CHEN | // enable voltage measurements cell1, cell2, Vbatt
+                                MAX17205_PACKCFG_TDEN | // enable die temperature measurement
+                                MAX17205_PACKCFG_A1EN | // enable AIN1 channel temperature measurement
+                                MAX17205_PACKCFG_A2EN); // enable AIN2 channel temperature measurement
 
 struct max17205_config {
 	struct i2c_dt_spec i2c;
+	struct i2c_dt_spec i2c_aux;
+	/* I2C slave address for secondary register bank */
+	uint16_t aux_addr;
+	/* Number of cells in the pack */
+	uint16_t num_cells;
+	/* Cell balance threshold in mV */
+	uint16_t cell_bal_thresh_voltage;
+	/* Pack configuration flags */
+	uint16_t pack_flags;
 	/* Value of Rsense resistor in milliohms (typically 5 or 10) */
 	uint16_t rsense_mohms;
-	/* Design voltage of cell in mV */
-	uint16_t design_voltage;
-	/* Desired voltage of cell in mV */
-	uint16_t desired_voltage;
-	/* Desired charging current in mA */
-	uint16_t desired_charging_current;
-	/* Battery capacity in mAh */
-	uint16_t design_cap;
-	/* Empty voltage detection in mV */
-	uint16_t empty_voltage;
-	/* Recovery voltage detection in mV */
-	uint16_t recovery_voltage;
-	/* Defined charge voltage value in mV */
-	uint16_t charge_voltage;
 };
+
 /**
  * @brief   Structure to store register:value pairs for configuration
  */
