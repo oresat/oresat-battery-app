@@ -8,7 +8,7 @@
 #include <board_sensors.h>
 #include <oresat.h>
 
-LOG_MODULE_REGISTER(app_battery, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(app_battery, CONFIG_APP_BATTERY_LOG_LEVEL);
 
 #define CAN_INTERFACE (DEVICE_DT_GET(DT_CHOSEN(zephyr_canbus)))
 #define CAN_BITRATE									   \

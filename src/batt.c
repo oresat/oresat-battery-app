@@ -20,20 +20,18 @@
 #include <sys/param.h>
 #include <string.h>
 
-TODO:
-- replace #defines that affect build below with Kconfigs:
-   DEBUG_PRINT, VERBOSE_DEBUG, ENABLE_NV_MEMORY_UPDATE_CODE, ENABLE_LEARN_COMPLETE, ENABLE_HEATERS,
-   ENABLE_CHARGING_CONTROL, HIST_STORE_PROMPT
-- re-review writes to N-version of registers vs. non-N
-- do we need to still deal with PACKCFG here? done in the driver now
-- port common/lib/util/oresat.h to Zephyr
+// TODO:
+// - re-review writes to N-version of registers vs. non-N
+// - do we need to still deal with PACKCFG here? done in the driver now <-- remove once tested to confirm driver is working
 
-LOG_MODULE_DECLARE(app_battery, LOG_LEVEL_DBG);
+LOG_MODULE_DECLARE(app_battery, CONFIG_APP_BATTERY_LOG_LEVEL);
 
-// Dump complete battery history
-#if !defined(VERBOSE_DEBUG)
-#define VERBOSE_DEBUG 0
+#if DEBUG_PRINT
+#pragma message("Debug messages enabled")
+#else
+#pragma message("Debug messages disabled")
 #endif
+
 #if VERBOSE_DEBUG
 #pragma message("Verbose debug messages enabled")
 #else
@@ -41,10 +39,7 @@ LOG_MODULE_DECLARE(app_battery, LOG_LEVEL_DBG);
 #endif
 
 // If batt_nv_programing_cfg registers do not match current, rewrite the RAM shadow then prompt to write to NV.
-#if !defined(ENABLE_NV_MEMORY_UPDATE_CODE)
-#define ENABLE_NV_MEMORY_UPDATE_CODE 0
-#endif
-#if ENABLE_NV_MEMORY_UPDATE_CODE
+#if CONFIG_ENABLE_NV_MEMORY_UPDATE_CODE
 #pragma message("NV memory update code enabled")
 #else
 #pragma message("NV memory update code disabled")
@@ -52,10 +47,7 @@ LOG_MODULE_DECLARE(app_battery, LOG_LEVEL_DBG);
 
 // If state of charge is known to be full, set LS bits D6-D0 of LearnCfg register to 0b111
 // and write MixCap and RepCap registers to 2600.
-#if !defined(ENABLE_LEARN_COMPLETE)
-#define ENABLE_LEARN_COMPLETE 0
-#endif
-#if ENABLE_LEARN_COMPLETE
+#if CONFIG_ENABLE_LEARN_COMPLETE
 #pragma message("Enable learn complete enabled")
 #else
 #pragma message("Enable learn complete disabled")
@@ -63,40 +55,13 @@ LOG_MODULE_DECLARE(app_battery, LOG_LEVEL_DBG);
 
 // Recommend setting ENABLE_HEADERS to 0 for battery board v2.1. Otherwise, brownouts can occur, causing
 // the C3 to reboot the battery board.
-#if !defined(ENABLE_HEATERS)
-#define ENABLE_HEATERS 1
-#endif
-#if ENABLE_HEATERS
+#if CONFIG_ENABLE_HEATERS
 #pragma message("Heaters enabled")
 #else
 #pragma message("Heaters disabled")
 #endif
 
 #define NV_WRITE_PROMPT_TIMEOUT_S 15
-
-// This was disabled per discussion in Slack on April 25, 2021.
-#define ENABLE_CHARGING_CONTROL 0
-
-#if CONFIG_LOG_DEFAULT_LEVEL >= LOG_LEVEL_INF
-#define DEBUG_PRINT 1
-#else
-#define DEBUG_PRINT 0
-#endif
-
-// Simplify conditionals below -- DEBUG_PRINT is required for ENABLE_NV_MEMORY_UPDATE_CODE to do anything
-#if DEBUG_PRINT && ENABLE_NV_MEMORY_UPDATE_CODE
-#define ENABLE_NV_WRITE_PROMPT 1
-#else
-#define ENABLE_NV_WRITE_PROMPT 0
-#endif
-
-// Uncomment to only store within 3 seconds on 'y', or erase hist store flash on 'e'
-
-//if DEBUG_PRINT
-//#define HIST_STORE_PROMPT 1
-//#else
-#define HIST_STORE_PROMPT 0
-//#endif
 
 // Voltage below which we should stop everything until charging starts
 #define SHUTDOWN_MV 2850
@@ -181,7 +146,7 @@ static const max17205_regval_t batt_nv_programing_cfg[] = {
                                          //  loaded conditions; undefined encoding
 };
 
-#if ENABLE_HEATERS
+#if CONFIG_ENABLE_HEATERS
 static battery_heating_state_machine_state_t current_battery_state_machine_state = BATTERY_STATE_MACHINE_STATE_NOT_HEATING;
 #endif
 
@@ -254,21 +219,6 @@ pack_t *get_pack(unsigned int pack)
     }
 }
 
-static void palSetLine(int line)
-{
-    // TODO: replace with GPIO stuff
-}
-
-static void palClearLine(int line)
-{
-    // TODO: replace with GPIO stuff
-}
-
-static void palToggleLine(int line)
-{
-    // TODO: replace with GPIO stuff
-}
-
 static int init_heaters(void)
 {
     int ret;
@@ -326,7 +276,7 @@ static void heaters_on(bool on)
 /**
  * @brief Runs the battery state machine, responsible for turning on/off heaters, charging, discharging etc.
  */
-#if ENABLE_HEATERS
+#if CONFIG_ENABLE_HEATERS
 static void run_battery_heating_state_machine(void)
 {
     unsigned int i;
@@ -383,7 +333,7 @@ static void run_battery_heating_state_machine(void)
             break;
     }
 }
-#endif // ENABLE_HEATERS
+#endif // CONFIG_ENABLE_HEATERS
 
 
 /**
@@ -394,40 +344,38 @@ static void run_battery_heating_state_machine(void)
  */
 static void update_battery_charging_state(const pack_t *pack)
 {
-    LOG_DBG("LINE_DCHG_STAT_PK%d = %u", pack->pack_number, palReadLine(pack->line_dchg_stat));
-    LOG_DBG("LINE_CHG_STAT_PK%d  = %u", pack->pack_number, palReadLine(pack->line_chg_stat));
+    LOG_DBG("LINE_DCHG_STAT_PK%d = %u", pack->pack_number, gpio_pin_get_dt(pack->line_dchg_stat);
+    LOG_DBG("LINE_CHG_STAT_PK%d  = %u", pack->pack_number, gpio_pin_get_dt(pack->line_chg_stat));
 
-#if !ENABLE_CHARGING_CONTROL
-    (void)pack;
-#else
+#if CONFIG_ENABLE_CHARGING_CONTROL
     const batt_pack_data_t * const pk_data = &pack->data;
 
     if (!pk_data->is_data_valid) {
         //fail safe mode
-        palSetLine(pack->line_dchg_dis);
-        palSetLine(pack->line_chg_dis);
+        gpio_pin_set_dt(pack->line_dchg_dis, 1);
+        (pack->line_chg_dis);
         LOG_DBG("ERROR: %s data is invalid; disabling charging and discharging", pack->name);
         return;
     }
     if( pk_data->v_cell_mV < 3000 || pk_data->present_state_of_charge < 20 ) {
         //Disable discharge on both packs
         LOG_DBG("Disabling discharge on pack %u", pack->pack_number);
-        palSetLine(pack->line_dchg_dis);
+        gpio_pin_set_dt(pack->line_dchg_dis, 1);
     } else {
         LOG_DBG("Enabling discharge on pack %u", pack->pack_number);
         //Allow discharge on both packs
-        palClearLine(pack->line_dchg_dis);
+        gpio_pin_set_dt(pack->line_dchg_dis, 0);
     }
 
 
     if( pk_data->v_cell_mV > 4100 ) {
         LOG_DBG("Disabling charging on pack %u", pack->pack_number);
-        palSetLine(pack->line_chg_dis);
+        gpio_pin_set_dt(pack->line_chg_dis, 1);
     } else {
         LOG_DBG("Enabling charging on pack %u", pack->pack_number);
-        palClearLine(pack->line_chg_dis);
+        gpio_pin_set_dt(pack->line_chg_dis, 0);
     }
-#endif // ENABLE_CHARGING_CONTROL
+#endif // CONFIG_ENABLE_CHARGING_CONTROL
 }
 
 /**
@@ -585,19 +533,19 @@ static void populate_od_pack_data(pack_t *pack)
     batt_pack_data_t *pack_data = &pack->data;
     uint8_t state_bitmask = 0;
 
-    if( palReadLine(pack->heater_on) ) {
+    if( gpio_pin_get_dt(pack->heater_on) ) {
         state_bitmask |= (1 << STATUS_BIT_HEATER);
     }
-    if( palReadLine(pack->line_dchg_dis) ) {
+    if( gpio_pin_get_dt(pack->line_dchg_dis) ) {
         state_bitmask |= (1 << STATUS_BIT_DCHG_DIS);
     }
-    if (palReadLine(pack->line_chg_dis) ) {
+    if (gpio_pin_get_dt(pack->line_chg_dis) ) {
         state_bitmask |= (1 << STATUS_BIT_CHG_DIS);
     }
-    if( palReadLine(pack->line_dchg_stat) ) {
+    if( gpio_pin_get_dt(pack->line_dchg_stat) ) {
         state_bitmask |= (1 << STATUS_BIT_DCHG_STAT);
     }
-    if( palReadLine(pack->line_chg_stat) ) {
+    if( gpio_pin_get_dt(pack->line_chg_stat) ) {
         state_bitmask |= (1 << STATUS_BIT_CHG_STAT);
     }
 
@@ -718,7 +666,7 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
 #if VERBOSE_DEBUG
     print_batt_hist();
 #endif
-    find_last_batt_hist();
+    init_batt_hist();
 
     heaters_on(false);
 
@@ -787,7 +735,7 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
             }
         }
 
-#if ENABLE_HEATERS
+#if CONFIG_ENABLE_HEATERS
         if (!are_batteries_critically_low()) {
             run_battery_heating_state_machine();
         }
@@ -811,5 +759,4 @@ void batt_close(void)
     static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
 
     gpio_pin_set_dt(&led, GPIO_OUTPUT_INACTIVE);
-    palClearLine(LINE_LED);
 }

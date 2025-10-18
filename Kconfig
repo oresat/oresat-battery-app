@@ -2,5 +2,46 @@ menu "Zephyr"
 source "Kconfig.zephyr"
 endmenu
 
+config ENABLE_NV_MEMORY_UPDATE_CODE
+	bool "Enable writes to MAX17205 NV"
+	depends on MAX17205
+	help
+	  Enable writes to the NV memory. Only 7 total writes can occur ever on
+	  a given device.
+
+config ENABLE_LEARN_COMPLETE
+	bool "Enable handling end of capacity learning"
+	depends on MAX17205
+	help
+	  Enable detection of 7th learn cycle and termination of charge.
+	  Resets capacity to specified maximum for the cells.
+
+config ENABLE_HEATERS
+	bool "Enable battery pack heaters"
+	depends on MAX17205
+	help
+	  Enable maintaining temperature of packs between -5C and +5C.
+	  Requires boards version 3 or higher due to higher current
+	  requirements.
+
+config ENABLE_CHARGING_CONTROL
+	bool "Enable charging control"
+	depends on MAX17205
+	help
+	  Enable control of battery charging and discharging based on
+	  cell voltage. No longer used but remains just in case.
+	  This was disabled per discussion in Slack on April 25, 2021.
+
+config HIST_STORE_PROMPT
+	bool "Enable manual control over capacity history"
+	depends on MAX17205
+	help
+	  Enable manual prompting of user whether to erase, store, or
+	  ignore capacity history updates. Erasing means removing all
+	  stored capacity history -- useful during calibration and
+	  preflight prep.
+
 module = APP_BATTERY
 module-str = APP_BATTERY
+
+source "subsys/logging/Kconfig.template.log_config"

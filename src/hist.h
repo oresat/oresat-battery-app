@@ -6,7 +6,7 @@ extern "C" {
 #endif
 
 void print_batt_hist(void);
-void find_last_batt_hist(void);
+void init_batt_hist(void);
 void load_latest_batt_hist(pack_t *pack);
 bool store_current_batt_hist(void);
 

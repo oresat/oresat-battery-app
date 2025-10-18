@@ -1,6 +1,32 @@
 #ifndef _BATT_H_
 #define _BATT_H_
 
+// Dump complete battery history
+#if IS_ENABLED(CONFIG_APP_BATTERY_LOG_LEVEL_DBG)
+#define VERBOSE_DEBUG 1
+#else
+#define VERBOSE_DEBUG 0
+#endif
+
+#if CONFIG_APP_BATTERY_LOG_LEVEL >= LOG_LEVEL_INF
+#define DEBUG_PRINT 1
+#else
+#define DEBUG_PRINT 0
+#endif
+
+// Simplify conditionals below -- DEBUG_PRINT is required for ENABLE_NV_MEMORY_UPDATE_CODE to do anything
+#if DEBUG_PRINT && CONFIG_ENABLE_NV_MEMORY_UPDATE_CODE
+#define NV_WRITE_PROMPT_ENABLED 1
+#else
+#define NV_WRITE_PROMPT_ENABLED 0
+#endif
+
+#if DEBUG_PRINT && CONFIG_ENABLE_LEARN_COMPLETE
+#define LEARN_COMPLETE_ENABLED 1
+#else
+#define LEARN_COMPLETE_ENABLED 0
+#endif
+
 typedef struct {
     bool is_data_valid;
 

@@ -1,16 +1,16 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/sensor.h>
+#include <zephyr/fs/fcb.h>
 
 #include "hist.h"
 #include "batt.h"
 #include "calib.h"
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(max17205, CONFIG_SENSOR_LOG_LEVEL);
+LOG_MODULE_REGISTER(hist, CONFIG_APP_BATTERY_LOG_LEVEL);
 
 TODO:
 - port flash access to one of the Zephyr flash subsystems
-- use Kconfigs in place of various configuration macros (DEBUG_PRINT, VERBOSE_DEBUG, HIST_STORE_PROMPT, etc.)
 
 // raw register values to store at runtime per pack;
 // restoring after a reset should result in accurate
@@ -30,7 +30,11 @@ typedef struct __attribute__((packed)) runtime_battery_data {
     uint16_t crc;               // crc calculated over all fields prior to this field
 } runtime_battery_data_t;
 
-#define NUM_BATT_HIST_ENTRIES ((STM32F093_FLASH_PAGE_SIZE) / sizeof(runtime_battery_data_t))
+
+#define HIST_PARTITION FIXED_PARTITION_ID(hist_partition)
+#define HIST_PARTITION_SIZE FIXED_PARTITION_SIZE(hist_partition)
+
+#define NUM_BATT_HIST_ENTRIES ((HIST_PARTITION_SIZE) / sizeof(runtime_battery_data_t))
 
 // the flash3 section is defined in app_battery's linker script
 extern const void __flash3_size__;
@@ -40,6 +44,22 @@ static runtime_battery_data_t *last_valid_history_entry; // pointer to final ent
 static runtime_battery_data_t *last_empty_history_entry; // pointer to first empty entry
 
 static uint16_t reset_cycle_count;
+static struct fcb hist_fcb;
+
+static void find_last_batt_hist(void);
+
+void init_batt_hist(void)
+{
+    int rc = fcb_init(HIST_PARTITION, &hist_fcb);
+
+    if (rc) {
+        LOG_ERR("Error initializing battery history FCB: %d", rc);
+    } else {
+        LOG_DBG("Battery history FCB initialized");
+    }
+
+    return rc;
+}
 
 static void print_runtime_entry(runtime_battery_data_t *data, unsigned int start, unsigned int count, const char *prefix)
 {
@@ -57,26 +77,38 @@ static void print_runtime_entry(runtime_battery_data_t *data, unsigned int start
 #if VERBOSE_DEBUG
 void print_batt_hist(void)
 {
-    runtime_battery_data_t *data = battery_history;
+    runtime_battery_data_t data;
+    struct fcb_entry loc = {0};
     char prefix[10];
+    int rc;
 
     LOG_DBG("Runtime battery history:\r\nentry size=%lu, entry count=%u",
               sizeof(runtime_battery_data_t), NUM_BATT_HIST_ENTRIES);
 
+    if (fcb_is_empty(&hist_fcb)) {
+        LOG_INF("Runtime battery history is empty.");
+        return;
+    }
+
     for (unsigned int i = 0; i < NUM_BATT_HIST_ENTRIES; i++) {
-        if (!flashIsErasedF091((flashaddr_t)data, sizeof(runtime_battery_data_t))) {
-            snprintk(prefix, sizeof(prefix), "%d. ", i);
-            print_runtime_entry(data, 0, NPACKS, prefix);
-        } else {
-            LOG_DBG("%u. Found erased entry. Done.", i);
+        rc = fcb_getnext(&hist_fcb, &loc);
+        if (rc) {
+            LOG_ERR("Error getting next FCB entry: %d", rc);
             break;
         }
+        rc = fcb_flash_read(&hist_fcb, loc.fe_sector, loc.fe_data_off, &data, loc.fe_data_len);
+        if (rc) {
+            LOG_ERR("Error reading next FCB entry: %d", rc);
+            break;
+        }
+        snprintk(prefix, sizeof(prefix), "%d. ", i);
+        print_runtime_entry(data, 0, NPACKS, prefix);
         data++;
     }
 }
 #endif // VERBOSE_DEBUG
 
-void find_last_batt_hist(void)
+static void find_last_batt_hist(void)
 {
     runtime_battery_data_t *data = battery_history;
     last_valid_history_entry = NULL;
@@ -188,7 +220,7 @@ bool store_current_batt_hist(void)
     msg_t r;
     uint16_t tmp;
 
-#if HIST_STORE_PROMPT
+#if CONFIG_HIST_STORE_PROMPT
 
     LOG_DBG("********** Store batt_hist e(rase), y(es), n(o)? ");
     uint8_t ch = console_getchar(); // TODO: Zephyr console does not have a read timeout; switch to shell
@@ -202,7 +234,7 @@ bool store_current_batt_hist(void)
         LOG_DBG("Not storing ************");
         return true;
     }
-#endif // HIST_STORE_PROMPT
+#endif // CONFIG_HIST_STORE_PROMPT
     for (i = 0; i < NPACKS; i++) {
         create_batt_hist(get_pack(i), &new_data);
     }

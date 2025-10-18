@@ -5,10 +5,7 @@
 #include "calib.h"
 #include "batt.h"
 
-TODO:
-- replace DEBUG_PRINT, ENABLE_NV_WRITE_PROMPT, ENABLE_LEARN_COMPLETE with Kconfigs
-
-LOG_MODULE_REGISTER(max17205, CONFIG_SENSOR_LOG_LEVEL);
+LOG_MODULE_REGISTER(calib, CONFIG_APP_BATTERY_LOG_LEVEL);
 
 int max17205_reg_read(const struct device *dev, uint16_t addr, int16_t *val)
 {
@@ -498,7 +495,7 @@ bool nv_ram_write(const struct device *dev, const char *pack_str)
  * Helper function to trigger write of volatile memory on MAX71205 chip.
  * Returns true if NV was written, false otherwise.
  */
-#if ENABLE_NV_WRITE_PROMPT
+#if NV_WRITE_PROMPT_ENABLED
 static bool prompt_nv_write(const struct device *dev, const char *pack_str)
 {
     LOG_DBG("Write NV RAM to NV%s", pack_str);
@@ -534,11 +531,11 @@ static bool prompt_nv_write(const struct device *dev, const char *pack_str)
 
     return false; // no NV changes made
 }
-#endif // ENABLE_NV_WRITE_PROMPT
+#endif // NV_WRITE_PROMPT_ENABLED
 
 //If state of charge is known to be full, set LS bits D6-D0 of LearnCfg register to 0b111
 //and write MixCap and RepCap registers to 2600.
-#if ENABLE_LEARN_COMPLETE && DEBUG_PRINT
+#if LEARN_COMPLETE_ENABLED
 static bool update_learning_complete(const struct device *dev, pack_t *pack)
 {
     batt_pack_data_t *pack_data = &pack->data;
@@ -590,13 +587,13 @@ static bool update_learning_complete(const struct device *dev, pack_t *pack)
     }
     return false;
 }
-#endif // ENABLE_LEARN_COMPLETE
+#endif // LEARN_COMPLETE_ENABLED
 
 void manage_calibration(void)
 {
 #if DEBUG_PRINT
     unsigned int i;
-#if ENABLE_NV_WRITE_PROMPT
+#if NV_WRITE_PROMPT_ENABLED
     bool nv_written = false;
 #endif
     pack_t *pack;
@@ -606,30 +603,30 @@ void manage_calibration(void)
         LOG_DBG("%s:", pack->name);
         max17205_print_volatile_memory(pack->dev);
 
-#if ENABLE_LEARN_COMPLETE
-        // If ENABLE_LEARN_COMPLETE=1, ENABLE_NV_MEMORY_UPDATE_CODE=1 and DEBUG_PRINT are all enabled, we will only prompt to update
-        // NV when learning is complete. If ENABLE_LEARN_COMPLETE is not 1 but the others are, then we will only prompt to update
+#if LEARN_COMPLETE_ENABLED
+        // If LEARN_COMPLETE_ENABLED=1 and NV_WRITE_PROMPT_ENABLED=1 are both enabled, we will only prompt to update
+        // NV when learning is complete. If LEARN_COMPLETE_ENABLED is not 1 but the others are, then we will only prompt to update
         // NV if there is a change to NV RAM required (done prior to the main loop).
         pack->updated = update_learning_complete(pack->dev, pack);
-#endif
-#if ENABLE_NV_WRITE_PROMPT
+#endif // LEARN_COMPLETE_ENABLED
+#if NV_WRITE_PROMPT_ENABLED
         if (pack->init && pack->updated) {
             nv_written |= prompt_nv_write(pack->dev, pack->name);
             pack->updated = false;
         }
-#endif
+#endif // NV_WRITE_PROMPT_ENABLED
     }
 
-#if ENABLE_NV_WRITE_PROMPT
+#if NV_WRITE_PROMPT_ENABLED
     if (nv_written) {
-        LOG_DBG("Done with NV RAM update code, set ENABLE_NV_MEMORY_UPDATE_CODE=0 and re-write firmware.");
+        LOG_DBG("Done with NV RAM update code, set CONFIG_ENABLE_NV_MEMORY_UPDATE_CODE=0 and re-write firmware.");
         for (;;) {
             LOG_DBG(".");
             k_msleep(1000);
         }
     }
-#endif
-#endif
+#endif // NV_WRITE_PROMPT_ENABLED
+#endif // DEBUG_PRINT
 }
 
 // TODO: replace with X macros-generated table / fn
