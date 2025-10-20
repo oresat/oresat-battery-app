@@ -5,10 +5,9 @@
 extern "C" {
 #endif
 
-void print_batt_hist(void);
-void init_batt_hist(void);
-void load_latest_batt_hist(pack_t *pack);
-bool store_current_batt_hist(void);
+void batt_hist_init(void);
+void batt_hist_load_latest(pack_t *pack);
+bool batt_hist_store_current(void);
 
 #ifdef __cplusplus
 }

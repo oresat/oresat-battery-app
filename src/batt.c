@@ -661,13 +661,8 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
         return;
     }
 
+    batt_hist_init();
     heaters_init();
-
-#if VERBOSE_DEBUG
-    print_batt_hist();
-#endif
-    init_batt_hist();
-
     heaters_on(false);
 
     check_for_critically_low_batteries();
@@ -686,7 +681,7 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
     // too quickly leads to bad measurements otherwise.
     k_msleep(500);
     for (i = 0; i < NPACKS; i++) {
-        load_latest_batt_hist(&packs[i]);
+        batt_hist_load_latest(&packs[i]);
     }
 
     uint32_t loop = 0;
@@ -705,7 +700,7 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
 
         if (ms >= next_hist_update_ms) {
             next_hist_update_ms = ms + RUNTIME_BATT_STORE_INTERVAL_MS;
-            store_current_batt_hist();
+            batt_hist_store_current();
         }
 
         if (ms >= next_led_update_ms) {
