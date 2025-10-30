@@ -3,6 +3,7 @@
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/fs/fcb.h>
+#include <zephyr/sys/crc.h>
 
 #include <zephyr/device.h>
 #include <zephyr/console/console.h>
@@ -45,11 +46,6 @@ static uint16_t reset_cycle_count;
 static struct fcb hist_fcb;
 
 static void batt_hist_find_last(void);
-
-uint32_t crc32(uint8_t *src, size_t len, uint32_t crc)
-{
-    return 0;
-}
 
 void batt_hist_init(void)
 {
@@ -112,7 +108,7 @@ static void batt_hist_find_last(void)
         snprintk(prefix, sizeof(prefix), "%d. ", i);
         runtime_entry_print(&data, 0, NUM_PACKS, prefix);
 #endif // VERBOSE_DEBUG
-        check_crc = crc32((uint8_t *)&data, sizeof(data) - sizeof(data.crc), 0);
+        check_crc = crc32_ieee((uint8_t *)&data, sizeof(data) - sizeof(data.crc));
 
         if (check_crc == data.crc) {
             last_valid_history_entry = data;
@@ -192,7 +188,7 @@ static void batt_hist_create(runtime_battery_data_t *dest)
     dest->minute = k_uptime_seconds() / 60;
     dest->unused = 0;
     dest->estimated = false;
-    dest->crc = crc32((uint8_t *)dest, sizeof(*dest) - sizeof(dest->crc), 0);
+    dest->crc = crc32_ieee((uint8_t *)dest, sizeof(*dest) - sizeof(dest->crc));
 }
 
 static bool batt_hist_add_next(runtime_battery_data_t *new_data)
