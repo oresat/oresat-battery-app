@@ -2,6 +2,13 @@ menu "Zephyr"
 source "Kconfig.zephyr"
 endmenu
 
+config ACCESS_FLASH_STM32
+  default y
+  bool
+  depends on SOC_STM32F091XC
+  select USE_STM32_HAL_FLASH
+  select USE_STM32_HAL_FLASH_EX
+
 config ENABLE_NV_MEMORY_UPDATE_CODE
 	bool "Enable writes to MAX17205 NV"
 	depends on MAX17205
@@ -40,6 +47,8 @@ config HIST_STORE_PROMPT
 	  ignore capacity history updates. Erasing means removing all
 	  stored capacity history -- useful during calibration and
 	  preflight prep.
+
+rsource "drivers/sensor/maxim/max17205/Kconfig"
 
 module = APP_BATTERY
 module-str = APP_BATTERY

@@ -2,7 +2,7 @@
 
 description: Oresat battery packs device
 
-compatible: "oresat,battery-packs"
+compatible: "battery-packs"
 
 properties:
   alert-gpios:

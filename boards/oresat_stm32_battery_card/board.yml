@@ -1,6 +1,6 @@
 board:
-  name: nucleo_f091rc
-  full_name: Nucleo F091RC
-  vendor: st
+  name: oresat_stm32_battery_card
+  full_name: Oresat STM32F091 Battery Card
+  vendor: psas
   socs:
     - name: stm32f091xc

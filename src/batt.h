@@ -38,10 +38,10 @@ typedef struct {
     uint16_t v_cell_2_mV;
     uint16_t v_cell_avg_mV;
 
-    int32_t current_mA;
-    int32_t avg_current_mA;
-    int32_t max_current_mA;
-    int32_t min_current_mA;
+    int16_t current_mA;
+    int16_t avg_current_mA;
+    int16_t max_current_mA;
+    int16_t min_current_mA;
 
     uint32_t full_capacity_mAh;
     uint32_t reported_capacity_mAh;
@@ -77,7 +77,7 @@ typedef struct {
 typedef struct pack {
     bool init;
     bool updated;
-    const struct device *const dev;
+    const struct device *dev;
     batt_pack_data_t data;
     const struct gpio_dt_spec heater_on;
     const struct gpio_dt_spec line_dchg_dis;
@@ -98,14 +98,10 @@ typedef struct pack {
 
 #define MAX_HIST_STORE_RETRIES 4
 
+#define NUM_CELLS 2 /* Number of cells per pack */
+#define NUM_PACKS 2 /* Number of packs */
+
 #define ARRAY_LEN(x) (sizeof(x)/sizeof(x[0]))
-
-#define NCELLS          2U          /* Number of cells per pack */
-#define NPACKS          2U          /* Number of packs */
-
-// Some of the code and data below requires 2 packs of 2 cells. Any other configuration may require changes.
-STATIC_ASSERT(NCELLS == 2);
-STATIC_ASSERT(NPACKS == 2);
 
 extern pack_t *get_pack(unsigned int pack);
 

@@ -1,12 +1,19 @@
 #include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
 #include <zephyr/drivers/sensor.h>
+#include <zephyr/drivers/gpio.h>
 #include <zephyr/fs/fcb.h>
 
-#include "hist.h"
+#include <zephyr/device.h>
+#include <zephyr/console/console.h>
+#include <canopennode.h>
+#include <OD.h>
+#include <oresat.h>
+
 #include "batt.h"
+#include "hist.h"
 #include "calib.h"
 
-#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(hist, CONFIG_APP_BATTERY_LOG_LEVEL);
 
 // raw register values to store at runtime per pack;
@@ -19,7 +26,7 @@ typedef struct __attribute__((packed)) runtime_pack_data {
 
 // entry to append to already-written flash at next update interval
 typedef struct __attribute__((packed)) runtime_battery_data {
-    runtime_pack_data_t rt_packs[NPACKS];
+    runtime_pack_data_t rt_packs[NUM_PACKS];
     uint16_t rst_cycle;         // number of reset cycles so far
     uint16_t minute : 12;       // number of minutes so far during a cycle
     uint16_t unused : 3;        // must be 0
@@ -39,6 +46,11 @@ static struct fcb hist_fcb;
 
 static void batt_hist_find_last(void);
 
+uint32_t crc32(uint8_t *src, size_t len, uint32_t crc)
+{
+    return 0;
+}
+
 void batt_hist_init(void)
 {
     int rc = fcb_init(HIST_PARTITION, &hist_fcb);
@@ -49,8 +61,6 @@ void batt_hist_init(void)
         LOG_DBG("Battery history FCB initialized");
         batt_hist_find_last();
     }
-
-    return rc;
 }
 
 static void runtime_entry_print(runtime_battery_data_t *data, unsigned int start, unsigned int count, const char *prefix)
@@ -70,14 +80,16 @@ static void batt_hist_find_last(void)
 {
     runtime_battery_data_t data;
     struct fcb_entry loc = {0};
+#if VERBOSE_DEBUG
     char prefix[10];
+#endif
     uint32_t check_crc;
     int rc;
 
     memset(&last_valid_history_entry, 0, sizeof(last_valid_history_entry));
     memset(&last_valid_loc, 0, sizeof(last_valid_loc));
 
-    LOG_DBG("Runtime battery history:\r\nentry size=%lu, entry count=%u",
+    LOG_DBG("Runtime battery history:\r\nentry size=%zu, entry count=%u",
               sizeof(runtime_battery_data_t), NUM_BATT_HIST_ENTRIES);
 
     if (fcb_is_empty(&hist_fcb)) {
@@ -98,7 +110,7 @@ static void batt_hist_find_last(void)
         }
 #if VERBOSE_DEBUG
         snprintk(prefix, sizeof(prefix), "%d. ", i);
-        runtime_entry_print(&data, 0, NPACKS, prefix);
+        runtime_entry_print(&data, 0, NUM_PACKS, prefix);
 #endif // VERBOSE_DEBUG
         check_crc = crc32((uint8_t *)&data, sizeof(data) - sizeof(data.crc), 0);
 
@@ -112,7 +124,7 @@ static void batt_hist_find_last(void)
     // we found a good entry, so save a copy in RAM
     if (last_valid_loc.fe_sector != NULL) {
         LOG_DBG("Selected last valid runtime entry:");
-        runtime_entry_print(&last_valid_history_entry, 0, NPACKS, NULL);
+        runtime_entry_print(&last_valid_history_entry, 0, NUM_PACKS, NULL);
 
         reset_cycle_count = last_valid_history_entry.rst_cycle;
 
@@ -141,15 +153,15 @@ static void batt_hist_utilize(runtime_battery_data_t *src, pack_t *pack)
 
 void batt_hist_load_latest(pack_t *pack)
 {
-    if (last_valid_history_entry == NULL) {
+    if ((last_valid_history_entry.minute == 0) && (last_valid_history_entry.crc == 0)) {
         LOG_DBG("No latest battery history to load");
         return;
     }
 
     LOG_DBG("Loading entry to pack %u:", pack->pack_number);
-    runtime_entry_print(dest, pack->pack_number - 1, 1, NULL);
+    runtime_entry_print(&last_valid_history_entry, pack->pack_number - 1, 1, NULL);
 
-    batt_hist_utilize(last_valid_history_entry, pack);
+    batt_hist_utilize(&last_valid_history_entry, pack);
 }
 
 static void batt_hist_create(runtime_battery_data_t *dest)
@@ -158,7 +170,7 @@ static void batt_hist_create(runtime_battery_data_t *dest)
     uint16_t tmp;
     int rc;
 
-    for (unsigned int i = 0; i < NPACKS; i++) {
+    for (unsigned int i = 0; i < NUM_PACKS; i++) {
         pack = get_pack(i);
         rc = max17205_reg_read(pack->dev, MAX17205_AD_MIXCAP, &tmp);
         if (rc) {
@@ -177,7 +189,7 @@ static void batt_hist_create(runtime_battery_data_t *dest)
         }
     }
     dest->rst_cycle = reset_cycle_count;
-    dest->minute = TIME_I2S(chVTGetSystemTime()) / 60;
+    dest->minute = k_uptime_seconds() / 60;
     dest->unused = 0;
     dest->estimated = false;
     dest->crc = crc32((uint8_t *)dest, sizeof(*dest) - sizeof(dest->crc), 0);
@@ -193,7 +205,7 @@ static bool batt_hist_add_next(runtime_battery_data_t *new_data)
         LOG_ERR("Error on fcb_append(): %d", rc);
         return false;
     }
-    rc = fcb_flash_write(&hist_fcb, last_valid_loc.fe_sector, loc.fe_data_off, new_data, loc.fe_data_len);
+    rc = fcb_flash_write(&hist_fcb, last_valid_loc.fe_sector, last_valid_loc.fe_data_off, new_data, last_valid_loc.fe_data_len);
     if (rc) {
         LOG_ERR("Error on fcb_flash_write(): %d", rc);
         ok = false;
@@ -212,7 +224,6 @@ static bool batt_hist_add_next(runtime_battery_data_t *new_data)
 bool batt_hist_store_current(void)
 {
     runtime_battery_data_t new_data;
-    uint16_t tmp;
 
 #if CONFIG_HIST_STORE_PROMPT
     LOG_DBG("********** Store batt_hist e(rase), y(es), n(o)? ");
@@ -232,7 +243,7 @@ bool batt_hist_store_current(void)
     batt_hist_create(&new_data);
 
     LOG_DBG("Storing new runtime battery entry:");
-    runtime_entry_print(&new_data, 0, NPACKS, NULL);
+    runtime_entry_print(&new_data, 0, NUM_PACKS, NULL);
 
     if (batt_hist_add_next(&new_data)) {
             LOG_DBG("Done.");

@@ -1,5 +1,5 @@
-identifier: nucleo_f091rc
-name: ST Nucleo F091RC
+identifier: oresat_stm32_battery_card
+name: Oresat STM32 Battery Card
 type: mcu
 arch: arm
 toolchain:

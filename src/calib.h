@@ -5,6 +5,9 @@
 extern "C" {
 #endif
 
+#include <zephyr/drivers/sensor.h>
+#include "../drivers/sensor/maxim/max17205/max17205.h"
+
 int max17205_reg_read(const struct device *dev, uint16_t addr, int16_t *val);
 int max17205_reg_write(const struct device *dev, uint16_t addr, int16_t val);
 
@@ -13,7 +16,7 @@ int max17205_print_nonvolatile_memory(const struct device *dev);
 
 int max17205_read_history(const struct device *dev);
 
-bool nv_ram_write(MAX17205Driver *devp, const char *pack_str);
+bool nv_ram_write(const struct device *dev, const char *pack_str);
 void manage_calibration(void);
 
 const char* max17205_reg_to_str(const uint16_t reg);
@@ -87,9 +90,9 @@ static inline int max17205_read_time(const struct device *dev, enum sensor_chann
     return read_channel_int32_t(dev, type, dest);
 }
 
-static inline int max17205_read_percentage(const struct device *dev, enum sensor_channel type, uint32_t *dest)
+static inline int max17205_read_percentage(const struct device *dev, enum sensor_channel type, uint8_t *dest)
 {
-    return read_channel_int8_t(dev, type, dest);
+    return read_channel_int8_t(dev, type, (uint8_t *)dest);
 }
 
 static inline int max17205_read_cycles(const struct device *dev, uint16_t *dest)

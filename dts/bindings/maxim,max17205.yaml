@@ -1,0 +1,49 @@
+#
+# Copyright 2020 Google LLC
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+description: Maxim MAX17205 Fuel Gauge
+
+compatible: "maxim,max17205"
+
+include: [sensor-device.yaml, i2c-device.yaml]
+
+properties:
+  aux-addr:
+    type: int
+    required: true
+    description: |
+      Auxiliary I2C address for remainder of register map.
+
+  num-cells:
+    type: int
+    required: true
+    description: |
+      Number of cells in this pack.
+
+  cell-bal-thresh-voltage:
+    type: int
+    required: true
+    description: |
+      Cell balance threshold in mV.
+
+  pack-flags:
+    type: int
+    required: true
+    description: |
+      Pack configuration flags for the MAX17205_AD_NPACKCFG register, not
+      including the number of cells.
+
+  rsense-mohms:
+    type: int
+    required: true
+    description: |
+      Value of Rsense resistor in milliohms (e.g. 5). It cannot be 0.
+
+  config:
+    type: int
+    required: true
+    description: |
+      MAX17205_AD_CONFIG register value.

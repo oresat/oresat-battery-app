@@ -3,40 +3,25 @@
 #include <zephyr/sys/reboot.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/printk.h>
+#include <zephyr/drivers/gpio.h>
 #include <canopennode.h>
 #include <OD.h>
 #include <board_sensors.h>
 #include <oresat.h>
 
+#include "batt.h"
+
 LOG_MODULE_REGISTER(app_battery, CONFIG_APP_BATTERY_LOG_LEVEL);
 
 #define CAN_INTERFACE (DEVICE_DT_GET(DT_CHOSEN(zephyr_canbus)))
-#define CAN_BITRATE									   \
-	(DT_PROP_OR(DT_CHOSEN(zephyr_canbus), bitrate, 					   \
-	DT_PROP_OR(DT_CHOSEN(zephyr_canbus), bus_speed, CONFIG_CAN_DEFAULT_BITRATE) / 1000))
+#define CAN_BITRATE (DT_PROP_OR(DT_CHOSEN(zephyr_canbus), bitrate, \
+					 DT_PROP_OR(DT_CHOSEN(zephyr_canbus), bus_speed, CONFIG_CAN_DEFAULT_BITRATE) / 1000))
 
 #define BATT_THREAD_STACK_SIZE 512
 #define BATT_THREAD_PRIORITY 0
 
-//TODO timing for i2c2 is different the i2c1. Scope the lines and match them up.
-/* ---- ChibiOS definition -- port this ---- */
-static const I2CConfig i2cconfig_1 = {
-	STM32_TIMINGR_PRESC(0xBU) |
-	STM32_TIMINGR_SCLDEL(0x4U) | STM32_TIMINGR_SDADEL(0x2U) |
-	STM32_TIMINGR_SCLH(0xFU)  | STM32_TIMINGR_SCLL(0x13U),
-	0,
-	0
-};
-*/
-/* ---- ChibiOS definition -- port this ---- */
-static const I2CConfig i2cconfig_2 = {
-	STM32_TIMINGR_PRESC(0xFU) |
-	STM32_TIMINGR_SCLDEL(0x4U) | STM32_TIMINGR_SDADEL(0x2U) |
-	STM32_TIMINGR_SCLH(0xFU)  | STM32_TIMINGR_SCLL(0x13U),
-	0,
-	0
-};
-*/
+static K_THREAD_STACK_DEFINE(batt_stack, BATT_THREAD_STACK_SIZE);
+static struct k_thread batt_thread_data;
 
 int main(void)
 {
@@ -51,12 +36,9 @@ int main(void)
 	LOG_DBG("Initializing sensors");
 	board_sensors_init();
 
-	K_THREAD_STACK_DEFINE(batt_stack, BATT_THREAD_STACK_SIZE);
-	struct k_thread batt_thread_data;
-
 	k_tid_t batt_thread = k_thread_create(&batt_thread_data, batt_stack, K_THREAD_STACK_SIZEOF(batt_stack),
-					batt_thread_handler, NULL, NULL, NULL,
-					BATT_THREAD_PRIORITY, 0, K_NO_WAIT);
+										  batt_thread_handler, NULL, NULL, NULL,
+										  BATT_THREAD_PRIORITY, 0, K_NO_WAIT);
 
 // the battery thread is now running; wait until it exits, if ever, then clean up
 	k_thread_join(batt_thread, K_FOREVER);

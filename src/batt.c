@@ -16,7 +16,7 @@
 //#include "chtime.h"
 //#include "oresat_f0.h"
 //#include "flash_f0.h"
-#include "crc.h"
+//#include "crc.h"
 #include <sys/param.h>
 #include <string.h>
 
@@ -26,6 +26,11 @@
 
 LOG_MODULE_DECLARE(app_battery, CONFIG_APP_BATTERY_LOG_LEVEL);
 
+// Some of the code and data below requires 2 packs of 2 cells. Any other configuration may require changes.
+STATIC_ASSERT(NUM_CELLS == 2);
+STATIC_ASSERT(NUM_PACKS == 2);
+
+#if 0
 #if DEBUG_PRINT
 #pragma message("Debug messages enabled")
 #else
@@ -60,6 +65,7 @@ LOG_MODULE_DECLARE(app_battery, CONFIG_APP_BATTERY_LOG_LEVEL);
 #else
 #pragma message("Heaters disabled")
 #endif
+#endif
 
 #define NV_WRITE_PROMPT_TIMEOUT_S 15
 
@@ -93,115 +99,69 @@ typedef enum {
     STATUS_BIT_CHG_STAT
 } status_bits;
 
-/*
-  The values for batt_nv_programing_cfg are detailed in the google document "MAX17205 Register Values"
-  These values were generated using the windows tool from Maxim and while they are probably not totally
-  correct yield generally reasonable read back values from the MAX17 chip.
- */
-static const uint16_t PACKCFG = (_VAL2FLD(MAX17205_PACKCFG_NCELLS, NCELLS) | // 2 cells
-                                 MAX17205_PACKCFG_BALCFG_40 | // 40 mV cell balance threshold
-                                 MAX17205_PACKCFG_BTEN | // enable Vbatt channel
-                                 MAX17205_PACKCFG_CHEN | // enable voltage measurements cell1, cell2, Vbatt
-                                 MAX17205_PACKCFG_TDEN | // enable die temperature measurement
-                                 MAX17205_PACKCFG_A1EN | // enable AIN1 channel temperature measurement
-                                 MAX17205_PACKCFG_A2EN); // enable AIN2 channel temperature measurement
-
-static const max17205_regval_t batt_nv_programing_cfg[] = {
-    {MAX17205_AD_NPACKCFG,     PACKCFG },
-    {MAX17205_AD_NNVCFG0,      0x09A0 }, // Wizard: enCfg=1, enRCfg=1, enLCfg=1, enICT=1, enVE=1
-    {MAX17205_AD_NNVCFG1,      0x8006 }, // Wizard: enTGO=1, enCrv=1, enCTE=1
-    {MAX17205_AD_NNVCFG2,      0xFF0A }, // factory default; life logging every 10 cycles,
-                                         //  enIAvg=1, enFC=1, enVT=1, enMMC=1, enMMV=1, enMMT=1, enSOC=1, enT=1
-    {MAX17205_AD_NICHGTERM,    0x014D }, // Wizard: 52.0 mA
-    {MAX17205_AD_NVEMPTY,      0x965A }, // Wizard: VEmpty = 0x12C * 10mV = 3.0v; VRecovery = 0x5A * 40mV = 3.6v
-    {MAX17205_AD_NTCURVE,      0x0064 }, // Wizard / datasheet recommendation for Fenwal thermistor
-    {MAX17205_AD_NTGAIN,       0xF49A }, // ditto
-    {MAX17205_AD_NTOFF,        0x16A1 }, // ditto
-    {MAX17205_AD_NDESIGNCAP,   0x1450 }, // Wizard: 2600 mAh (x2 conversion factor)
-    {MAX17205_AD_NFULLCAPREP,  0x1450 }, // ditto
-    {MAX17205_AD_NFULLCAPNOM,  0x1A22 }, // Wizard: 0x1794; full learning cycle found 0x1A22 on average
-                                         //  of 2 packs so use that instead
-
-    // Missing from in flight fw, but present in Wizard output with m5 EZ battery model:
-    {MAX17205_AD_NQRTABLE00,   0x2280 }, // nQRTable00-30 contain battery characteristic data
-    {MAX17205_AD_NQRTABLE10,   0x1000 }, // no further information provided in datasheet about
-    {MAX17205_AD_NQRTABLE20,   0x0681 }, // actual meaning of each value
-    {MAX17205_AD_NQRTABLE30,   0x0682 },
-    {MAX17205_AD_NIAVGEMPTY,   0xEBB0 }, // Calling this I (current) seems wrong -- 0xEBB0 is actually -5200
-                                         //  (2s complement) x 156.25uA = 0.8125A. Alternate value based on
-                                         //  nVCfg2.enIAvg = 0 is -1 x nFullCapNom; for that EBB0 is right,
-                                         //  but isn't actually right since nVCfg2.enIAvg = 1.
-    {MAX17205_AD_NCONFIG,      0x0211 }, // Temperature channel enable, temperature alert enable
-    {MAX17205_AD_NMISCCFG,     0x3870 }, // FUS (Full Update Slope) = 6% (rate of adj of FullCapRep near end
-                                         //  of charge cycle); MR (Servo Mixing Rate) = 18.75uV. However,
-                                         //  bit 11 must = 1 according to datasheet (Wizard said: 0x3070),
-                                         //  so set that bit
-    {MAX17205_AD_NCONVGCFG,    0x2241 }, // recommended factory default; RepLow = 4%; VoltLowOff = 40mV;
-                                         //  MinSlopeX = 0.25; RepL per Stage = 1%
-    {MAX17205_AD_NFULLSOCTHR,  0x5005 }, // recommended factory default for EZ Performance = 80% (units of 1/256%)
-    {MAX17205_AD_NRIPPLECFGCFG,0x0204 }, // recommended factory default; kDV = 64 (amount of capacity to
-                                         //  compensate proportional to ripple?); NR = filter mag for ripple
-                                         //  observation = 22.4 seconds
-    {MAX17205_AD_NRCOMP0,      0x006F }  // characteristic info for computing open-circuit voltage of cell under
-                                         //  loaded conditions; undefined encoding
-};
-
 #if CONFIG_ENABLE_HEATERS
 static battery_heating_state_machine_state_t current_battery_state_machine_state = BATTERY_STATE_MACHINE_STATE_NOT_HEATING;
 #endif
 
 // All packs defined here, including non-zero initial data.
-static pack_t packs[NPACKS] = {
+#define BP_NODE DT_NODELABEL(battpacks)
+
+static const struct gpio_dt_spec moarpwr = GPIO_DT_SPEC_GET(BP_NODE, moarpwr_gpios);
+
+static pack_t packs[NUM_PACKS] = {
     {
-     .heater_on = GPIO_DT_SPEC_GET_BY_IDX(packs, heater_gpios, 0),
-     .line_dchg_dis = GPIO_DT_SPEC_GET_BY_IDX(packs, discharge_disable_gpios, 0),
-     .line_chg_dis = GPIO_DT_SPEC_GET_BY_IDX(packs, charge_disable_gpios, 0),
-     .line_dchg_stat = GPIO_DT_SPEC_GET_BY_IDX(packs, discharge_stat_oc_gpios, 0),
-     .line_chg_stat = GPIO_DT_SPEC_GET_BY_IDX(packs, charge_stat_oc_gpios, 0),
-     .line_alert = GPIO_DT_SPEC_GET_BY_IDX(packs, alert_gpios, 0),
+     .heater_on = GPIO_DT_SPEC_GET_BY_IDX(BP_NODE, heater_gpios, 0),
+     .line_dchg_dis = GPIO_DT_SPEC_GET_BY_IDX(BP_NODE, discharge_disable_gpios, 0),
+     .line_chg_dis = GPIO_DT_SPEC_GET_BY_IDX(BP_NODE, charge_disable_gpios, 0),
+     .line_dchg_stat = GPIO_DT_SPEC_GET_BY_IDX(BP_NODE, discharge_stat_oc_gpios, 0),
+     .line_chg_stat = GPIO_DT_SPEC_GET_BY_IDX(BP_NODE, charge_stat_oc_gpios, 0),
+     .line_alert = GPIO_DT_SPEC_GET_BY_IDX(BP_NODE, alert_gpios, 0),
      .pack_number = 1,
      .name = "Pack 1"
     },
     {
-     .heater_on = GPIO_DT_SPEC_GET_BY_IDX(packs, heater_gpios, 1),
-     .line_dchg_dis = GPIO_DT_SPEC_GET_BY_IDX(packs, discharge_disable_gpios, 1),
-     .line_chg_dis = GPIO_DT_SPEC_GET_BY_IDX(packs, charge_disable_gpios, 1),
-     .line_dchg_stat = GPIO_DT_SPEC_GET_BY_IDX(packs, discharge_stat_oc_gpios, 1),
-     .line_chg_stat = GPIO_DT_SPEC_GET_BY_IDX(packs, charge_stat_oc_gpios, 1),
-     .line_alert = GPIO_DT_SPEC_GET_BY_IDX(packs, alert_gpios, 1),
+     .heater_on = GPIO_DT_SPEC_GET_BY_IDX(BP_NODE, heater_gpios, 1),
+     .line_dchg_dis = GPIO_DT_SPEC_GET_BY_IDX(BP_NODE, discharge_disable_gpios, 1),
+     .line_chg_dis = GPIO_DT_SPEC_GET_BY_IDX(BP_NODE, charge_disable_gpios, 1),
+     .line_dchg_stat = GPIO_DT_SPEC_GET_BY_IDX(BP_NODE, discharge_stat_oc_gpios, 1),
+     .line_chg_stat = GPIO_DT_SPEC_GET_BY_IDX(BP_NODE, charge_stat_oc_gpios, 1),
+     .line_alert = GPIO_DT_SPEC_GET_BY_IDX(BP_NODE, alert_gpios, 1),
      .pack_number = 2,
      .name = "Pack 2"
     }
 };
 
-static const struct gpio_dt_spec moarpwr = GPIO_DT_SPEC_GET(packs, moarpwr_gpios);
+static void batt_init(void)
+{
+}
 
+#if 0
 #define GPIO_NODE DT_NODELABEL(gpiob)
 #define CAN_ID_PIN_0 3
 #define CAN_ID_PIN_1 4
 /* Not sure if these CAN ID signals are actually used, but they're on the schematic */
 static int get_can_id(void)
 {
-    const struct device const gpio_dev = DEVICE_DT_GET(GPIO_NODE);
+    const struct device *gpio_dev = DEVICE_DT_GET(GPIO_NODE);
     int id = 0;
     int val;
 
-    val = gpio_pin_configure(&gpio_dev, CAN_ID_PIN_0, GPIO_INPUT | GPIO_PULL_UP);
+    val = gpio_pin_configure(gpio_dev, CAN_ID_PIN_0, GPIO_INPUT | GPIO_PULL_UP);
     if (val < 0) {
         return val;
     }
-    val = gpio_pin_configure(&gpio_dev, CAN_ID_PIN_1, GPIO_INPUT | GPIO_PULL_UP);
+    val = gpio_pin_configure(gpio_dev, CAN_ID_PIN_1, GPIO_INPUT | GPIO_PULL_UP);
     if (val < 0) {
         return val;
     }
 
-    val = gpio_pin_get(&gpio_dev, CAN_ID_PIN_0);
+    val = gpio_pin_get(gpio_dev, CAN_ID_PIN_0);
     if (val < 0) {
         return val;
     }
     id = val;
 
-    val = gpio_pin_get(&gpio_dev, CAN_ID_PIN_1);
+    val = gpio_pin_get(gpio_dev, CAN_ID_PIN_1);
     if (val < 0) {
         return val;
     }
@@ -209,17 +169,18 @@ static int get_can_id(void)
 
     return id;
 }
+#endif
 
 pack_t *get_pack(unsigned int pack)
 {
-    if (pack < NPACKS) {
+    if (pack < NUM_PACKS) {
         return &packs[pack];
     } else {
         return NULL;
     }
 }
 
-static int init_heaters(void)
+static int heaters_init(void)
 {
     int ret;
     int pack;
@@ -229,28 +190,28 @@ static int init_heaters(void)
         return ret;
     }
 
-    for (pack = 0; pack < NPACKS; pack++) {
-        ret = gpio_pin_configure_dt(packs[pack].heater_on, GPIO_OUTPUT_INACTIVE);
+    for (pack = 0; pack < NUM_PACKS; pack++) {
+        ret = gpio_pin_configure_dt(&packs[pack].heater_on, GPIO_OUTPUT_INACTIVE);
         if (ret) {
             return ret;
         }
-        ret = gpio_pin_configure_dt(packs[pack].line_chg_dis, GPIO_OUTPUT_INACTIVE);
+        ret = gpio_pin_configure_dt(&packs[pack].line_chg_dis, GPIO_OUTPUT_INACTIVE);
         if (ret) {
             return ret;
         }
-        ret = gpio_pin_configure_dt(packs[pack].line_dchg_dis, GPIO_OUTPUT_INACTIVE);
+        ret = gpio_pin_configure_dt(&packs[pack].line_dchg_dis, GPIO_OUTPUT_INACTIVE);
         if (ret) {
             return ret;
         }
-        ret = gpio_pin_configure_dt(packs[pack].line_chg_stat, GPIO_INPUT);
+        ret = gpio_pin_configure_dt(&packs[pack].line_chg_stat, GPIO_INPUT);
         if (ret) {
             return ret;
         }
-        ret = gpio_pin_configure_dt(packs[pack].line_dchg_stat, GPIO_INPUT);
+        ret = gpio_pin_configure_dt(&packs[pack].line_dchg_stat, GPIO_INPUT);
         if (ret) {
             return ret;
         }
-        ret = gpio_pin_configure_dt(packs[pack].line_alert, GPIO_INPUT);
+        ret = gpio_pin_configure_dt(&packs[pack].line_alert, GPIO_INPUT);
         if (ret) {
             return ret;
         }
@@ -281,7 +242,7 @@ static void run_battery_heating_state_machine(void)
 {
     unsigned int i;
 
-    for (i = 0; i < NPACKS; i++) {
+    for (i = 0; i < NUM_PACKS; i++) {
         if (!packs[i].data.is_data_valid) {
             LOG_DBG("FAILSAFE: ");
             heaters_on(false);
@@ -296,13 +257,13 @@ static void run_battery_heating_state_machine(void)
             //Once they’re greater than 5 °C or the combined pack capacity is < 25%
             bool warm_enough = true;
             uint16_t total_state_of_charge = 0;
-            for (i = 0; i < NPACKS; i++) {
+            for (i = 0; i < NUM_PACKS; i++) {
                 if( packs[i].data.avg_temp_1_C <= 5 ) {
                     warm_enough = false;
                 }
                 total_state_of_charge += packs[i].data.present_state_of_charge;
             }
-            total_state_of_charge /= NPACKS;
+            total_state_of_charge /= NUM_PACKS;
             if( warm_enough || (total_state_of_charge < 25) ) {
                 current_battery_state_machine_state = BATTERY_STATE_MACHINE_STATE_NOT_HEATING;
                 LOG_DBG("Turning heaters OFF");
@@ -314,7 +275,7 @@ static void run_battery_heating_state_machine(void)
             //Once they’re less than -5 °C and the combined pack capacity is > 25%
             bool too_cold = false;
             bool full_enough = false;
-            for (i = 0; i < NPACKS; i++) {
+            for (i = 0; i < NUM_PACKS; i++) {
                 if( packs[i].data.avg_temp_1_C < -5 ) {
                     too_cold = true;
                 }
@@ -344,15 +305,15 @@ static void run_battery_heating_state_machine(void)
  */
 static void update_battery_charging_state(const pack_t *pack)
 {
-    LOG_DBG("LINE_DCHG_STAT_PK%d = %u", pack->pack_number, gpio_pin_get_dt(pack->line_dchg_stat);
-    LOG_DBG("LINE_CHG_STAT_PK%d  = %u", pack->pack_number, gpio_pin_get_dt(pack->line_chg_stat));
+    LOG_DBG("LINE_DCHG_STAT_PK%d = %u", pack->pack_number, gpio_pin_get_dt(&pack->line_dchg_stat));
+    LOG_DBG("LINE_CHG_STAT_PK%d  = %u", pack->pack_number, gpio_pin_get_dt(&pack->line_chg_stat));
 
 #if CONFIG_ENABLE_CHARGING_CONTROL
     const batt_pack_data_t * const pk_data = &pack->data;
 
     if (!pk_data->is_data_valid) {
         //fail safe mode
-        gpio_pin_set_dt(pack->line_dchg_dis, 1);
+        gpio_pin_set_dt(&pack->line_dchg_dis, 1);
         (pack->line_chg_dis);
         LOG_DBG("ERROR: %s data is invalid; disabling charging and discharging", pack->name);
         return;
@@ -360,20 +321,20 @@ static void update_battery_charging_state(const pack_t *pack)
     if( pk_data->v_cell_mV < 3000 || pk_data->present_state_of_charge < 20 ) {
         //Disable discharge on both packs
         LOG_DBG("Disabling discharge on pack %u", pack->pack_number);
-        gpio_pin_set_dt(pack->line_dchg_dis, 1);
+        gpio_pin_set_dt(&pack->line_dchg_dis, 1);
     } else {
         LOG_DBG("Enabling discharge on pack %u", pack->pack_number);
         //Allow discharge on both packs
-        gpio_pin_set_dt(pack->line_dchg_dis, 0);
+        gpio_pin_set_dt(&pack->line_dchg_dis, 0);
     }
 
 
     if( pk_data->v_cell_mV > 4100 ) {
         LOG_DBG("Disabling charging on pack %u", pack->pack_number);
-        gpio_pin_set_dt(pack->line_chg_dis, 1);
+        gpio_pin_set_dt(&pack->line_chg_dis, 1);
     } else {
         LOG_DBG("Enabling charging on pack %u", pack->pack_number);
-        gpio_pin_set_dt(pack->line_chg_dis, 0);
+        gpio_pin_set_dt(&pack->line_chg_dis, 0);
     }
 #endif // CONFIG_ENABLE_CHARGING_CONTROL
 }
@@ -388,49 +349,49 @@ static void update_battery_charging_state(const pack_t *pack)
  */
 static bool populate_pack_data(const struct device *dev, batt_pack_data_t *dest)
 {
-    msg_t r = 0;
+    int rc;
     memset(dest, 0, sizeof(*dest));
 
     dest->is_data_valid = true;
 
 
-    if( (r = max17205_read_average_temperature(dev, MAX17205_CHAN_TEMP_1, &dest->temp_1_C)) != MSG_OK ) {
+    if( (rc = max17205_read_average_temperature(dev, MAX17205_CHAN_TEMP_1, &dest->temp_1_C)) != 0 ) {
         dest->is_data_valid = false;
     }
-    if( (r = max17205_read_average_temperature(dev, MAX17205_CHAN_TEMP_2, &dest->temp_2_C)) != MSG_OK ) {
+    if( (rc = max17205_read_average_temperature(dev, MAX17205_CHAN_TEMP_2, &dest->temp_2_C)) != 0 ) {
         dest->is_data_valid = false;
     }
-    if( (r = max17205_read_average_temperature(dev, SENSOR_CHAN_GAUGE_TEMP, &dest->int_temp_C)) != MSG_OK ) {
+    if( (rc = max17205_read_average_temperature(dev, SENSOR_CHAN_GAUGE_TEMP, &dest->int_temp_C)) != 0 ) {
         dest->is_data_valid = false;
     }
-    if( (r = max17205_read_average_temperature(dev, MAX17205_CHAN_AVG_TEMP_1, &dest->avg_temp_1_C)) != MSG_OK ) {
+    if( (rc = max17205_read_average_temperature(dev, MAX17205_CHAN_AVG_TEMP_1, &dest->avg_temp_1_C)) != 0 ) {
         dest->is_data_valid = false;
     }
-    if( (r = max17205_read_average_temperature(dev, MAX17205_CHAN_AVG_TEMP_2, &dest->avg_temp_2_C)) != MSG_OK ) {
+    if( (rc = max17205_read_average_temperature(dev, MAX17205_CHAN_AVG_TEMP_2, &dest->avg_temp_2_C)) != 0 ) {
         dest->is_data_valid = false;
     }
-    if( (r = max17205_read_average_temperature(dev, MAX17205_CHAN_AVG_INT_TEMP, &dest->avg_int_temp_C)) != MSG_OK ) {
+    if( (rc = max17205_read_average_temperature(dev, MAX17205_CHAN_AVG_INT_TEMP, &dest->avg_int_temp_C)) != 0 ) {
         dest->is_data_valid = false;
     }
-    if( (r = max17205_read_max_temperature(dev, &dest->temp_max_C)) != MSG_OK ) {
+    if( (rc = max17205_read_max_temperature(dev, &dest->temp_max_C)) != 0 ) {
         dest->is_data_valid = false;
     }
-    if( (r = max17205_read_min_temperature(dev, &dest->temp_min_C)) != MSG_OK ) {
+    if( (rc = max17205_read_min_temperature(dev, &dest->temp_min_C)) != 0 ) {
         dest->is_data_valid = false;
     }
 
     /* Record pack and cell voltages to object dictionary */
-    if( (r = max17205_read_voltage(dev, MAX17205_CHAN_V_CELL_1, &dest->v_cell_1_mV)) != MSG_OK ) {
+    if( (rc = max17205_read_voltage(dev, MAX17205_CHAN_V_CELL_1, &dest->v_cell_1_mV)) != 0 ) {
         dest->is_data_valid = false;
     }
 
-    if( (r = max17205_read_voltage(dev, MAX17205_CHAN_V_CELL_AVG, &dest->v_cell_avg_mV)) != MSG_OK ) {
+    if( (rc = max17205_read_voltage(dev, MAX17205_CHAN_V_CELL_AVG, &dest->v_cell_avg_mV)) != 0 ) {
     dest->is_data_valid = false;
    }
-    if( (r = max17205_read_voltage(dev, MAX17205_CHAN_V_CELL, &dest->v_cell_mV)) != MSG_OK ) {
+    if( (rc = max17205_read_voltage(dev, MAX17205_CHAN_V_CELL, &dest->v_cell_mV)) != 0 ) {
         dest->is_data_valid = false;
     }
-    if( (r = max17205_read_batt(dev, &dest->batt_mV)) != MSG_OK ) {
+    if( (rc = max17205_read_batt(dev, &dest->batt_mV)) != 0 ) {
         dest->is_data_valid = false;
     }
 
@@ -438,61 +399,61 @@ static bool populate_pack_data(const struct device *dev, batt_pack_data_t *dest)
         dest->v_cell_2_mV = dest->batt_mV - dest->v_cell_1_mV;
     }
 
-    if( (r = max17205_read_max_voltage(dev, &dest->v_cell_max_volt_mV)) != MSG_OK ) {
+    if( (rc = max17205_read_max_voltage(dev, &dest->v_cell_max_volt_mV)) != 0 ) {
         dest->is_data_valid = false;
     }
-    if( (r = max17205_read_min_voltage(dev, &dest->v_cell_min_volt_mV)) != MSG_OK ) {
-        dest->is_data_valid = false;
-    }
-
-    if( (r = max17205_read_current(dev, SENSOR_CHAN_CURRENT, &dest->current_mA)) != MSG_OK ) {
-        dest->is_data_valid = false;
-    }
-    if( (r = max17205_read_current(dev, SENSOR_CHAN_GAUGE_AVG_CURRENT, &dest->avg_current_mA)) != MSG_OK ) {
+    if( (rc = max17205_read_min_voltage(dev, &dest->v_cell_min_volt_mV)) != 0 ) {
         dest->is_data_valid = false;
     }
 
-    if( (r = max17205_read_max_current(dev, &dest->max_current_mA)) != MSG_OK ) {
+    if( (rc = max17205_read_current(dev, &dest->current_mA)) != 0 ) {
         dest->is_data_valid = false;
     }
-    if( (r = max17205_read_min_current(dev, &dest->min_current_mA)) != MSG_OK ) {
+    if( (rc = max17205_read_avg_current(dev, &dest->avg_current_mA)) != 0 ) {
+        dest->is_data_valid = false;
+    }
+
+    if( (rc = max17205_read_max_current(dev, &dest->max_current_mA)) != 0 ) {
+        dest->is_data_valid = false;
+    }
+    if( (rc = max17205_read_min_current(dev, &dest->min_current_mA)) != 0 ) {
         dest->is_data_valid = false;
     }
 
     /* capacity */
-    if( (r = max17205_read_capacity(dev, SENSOR_CHAN_GAUGE_FULL_CHARGE_CAPACITY, &dest->full_capacity_mAh)) != MSG_OK ) {
+    if( (rc = max17205_read_capacity(dev, SENSOR_CHAN_GAUGE_FULL_CHARGE_CAPACITY, &dest->full_capacity_mAh)) != 0 ) {
         dest->is_data_valid = false;
     }
-    if( (r = max17205_read_capacity(dev, SENSOR_CHAN_GAUGE_REMAINING_CHARGE_CAPACITY, &dest->available_capacity_mAh)) != MSG_OK ) {
+    if( (rc = max17205_read_capacity(dev, SENSOR_CHAN_GAUGE_REMAINING_CHARGE_CAPACITY, &dest->available_capacity_mAh)) != 0 ) {
         dest->is_data_valid = false;
     }
-    if( (r = max17205_read_capacity(dev, MAX17205_CHAN_MIX_CAPACITY, &dest->mix_capacity_mAh)) != MSG_OK ) {
+    if( (rc = max17205_read_capacity(dev, MAX17205_CHAN_MIX_CAPACITY, &dest->mix_capacity_mAh)) != 0 ) {
         dest->is_data_valid = false;
     }
-    if( (r = max17205_read_capacity(dev, SENSOR_CHAN_GAUGE_NOM_AVAIL_CAPACITY, &dest->reported_capacity_mAh)) != MSG_OK ) {
+    if( (rc = max17205_read_capacity(dev, SENSOR_CHAN_GAUGE_NOM_AVAIL_CAPACITY, &dest->reported_capacity_mAh)) != 0 ) {
         dest->is_data_valid = false;
     }
 
     /* state of charge */
-    if( (r = max17205_read_time(dev, SENSOR_CHAN_GAUGE_TIME_TO_EMPTY, &dest->time_to_empty_seconds)) != MSG_OK ) {
+    if( (rc = max17205_read_time(dev, SENSOR_CHAN_GAUGE_TIME_TO_EMPTY, &dest->time_to_empty_seconds)) != 0 ) {
         dest->is_data_valid = false;
     }
-    if( (r = max17205_read_time(dev, SENSOR_CHAN_GAUGE_TIME_TO_FULL, &dest->time_to_full_seconds)) != MSG_OK ) {
+    if( (rc = max17205_read_time(dev, SENSOR_CHAN_GAUGE_TIME_TO_FULL, &dest->time_to_full_seconds)) != 0 ) {
         dest->is_data_valid = false;
     }
 
-    if( (r = max17205_read_percentage(dev, MAX17205_CHAN_AVAILABLE_SOC, &dest->available_state_of_charge)) != MSG_OK ) {
+    if( (rc = max17205_read_percentage(dev, MAX17205_CHAN_AVAILABLE_SOC, &dest->available_state_of_charge)) != 0 ) {
         dest->is_data_valid = false;
     }
-    if( (r = max17205_read_percentage(dev, MAX17205_CHAN_PRESENT_SOC, &dest->present_state_of_charge)) != MSG_OK ) {
+    if( (rc = max17205_read_percentage(dev, MAX17205_CHAN_PRESENT_SOC, &dest->present_state_of_charge)) != 0 ) {
         dest->is_data_valid = false;
     }
-    if( (r = max17205_read_percentage(dev, MAX17205_CHAN_REPORTED_SOC, &dest->reported_state_of_charge)) != MSG_OK ) {
+    if( (rc = max17205_read_percentage(dev, MAX17205_CHAN_REPORTED_SOC, &dest->reported_state_of_charge)) != 0 ) {
         dest->is_data_valid = false;
     }
 
     /* other info */
-    if( (r = max17205_read_cycles(dev, &dest->cycles)) != MSG_OK ) {
+    if( (rc = max17205_read_cycles(dev, &dest->cycles)) != 0 ) {
         dest->is_data_valid = false;
     }
 
@@ -533,19 +494,19 @@ static void populate_od_pack_data(pack_t *pack)
     batt_pack_data_t *pack_data = &pack->data;
     uint8_t state_bitmask = 0;
 
-    if( gpio_pin_get_dt(pack->heater_on) ) {
+    if( gpio_pin_get_dt(&pack->heater_on) ) {
         state_bitmask |= (1 << STATUS_BIT_HEATER);
     }
-    if( gpio_pin_get_dt(pack->line_dchg_dis) ) {
+    if( gpio_pin_get_dt(&pack->line_dchg_dis) ) {
         state_bitmask |= (1 << STATUS_BIT_DCHG_DIS);
     }
-    if (gpio_pin_get_dt(pack->line_chg_dis) ) {
+    if (gpio_pin_get_dt(&pack->line_chg_dis) ) {
         state_bitmask |= (1 << STATUS_BIT_CHG_DIS);
     }
-    if( gpio_pin_get_dt(pack->line_dchg_stat) ) {
+    if( gpio_pin_get_dt(&pack->line_dchg_stat) ) {
         state_bitmask |= (1 << STATUS_BIT_DCHG_STAT);
     }
-    if( gpio_pin_get_dt(pack->line_chg_stat) ) {
+    if( gpio_pin_get_dt(&pack->line_chg_stat) ) {
         state_bitmask |= (1 << STATUS_BIT_CHG_STAT);
     }
 
@@ -604,7 +565,7 @@ static bool are_batteries_critically_low(void)
 {
     unsigned int i;
 
-    for (i = 0; i < NPACKS; i++) {
+    for (i = 0; i < NUM_PACKS; i++) {
         if ((packs[i].data.v_cell_1_mV < SHUTDOWN_MV) || (packs[i].data.v_cell_2_mV < SHUTDOWN_MV)) {
             LOG_DBG("Batteries are critically low!");
             return true;
@@ -621,7 +582,7 @@ static bool check_for_critically_low_batteries(void)
     unsigned int i;
 
     LOG_DBG("Check for critically low batteries");
-    for (i = 0; i < NPACKS; i++) {
+    for (i = 0; i < NUM_PACKS; i++) {
         if ((rc = max17205_read_voltage(packs[i].dev, MAX17205_CHAN_V_CELL_1, &packs[i].data.v_cell_1_mV)) != 0) {
             packs[i].data.v_cell_1_mV = 0;
         }
@@ -640,8 +601,8 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
     (void)p3;
     unsigned int i;
 
-	packs[0].dev = DEVICE_DT_GET(DT_ALIAS(pack1));
-	packs[1].dev = DEVICE_DT_GET(DT_ALIAS(pack2));
+	packs[0].dev = DEVICE_DT_GET(DT_NODELABEL(pack1));
+	packs[1].dev = DEVICE_DT_GET(DT_NODELABEL(pack2));
     static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
 
     console_init();
@@ -661,13 +622,14 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
         return;
     }
 
+    batt_init();
     batt_hist_init();
     heaters_init();
     heaters_on(false);
 
     check_for_critically_low_batteries();
 
-    for (i = 0; i < NPACKS; i++) {
+    for (i = 0; i < NUM_PACKS; i++) {
         packs[i].updated = nv_ram_write(packs[i].dev, packs[i].name);
 
         max17205_print_volatile_memory(packs[i].dev);
@@ -680,7 +642,7 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
     // Let MAX17205s startup and run for a bit. Overwriting the MIXCAP and REPCAP values
     // too quickly leads to bad measurements otherwise.
     k_msleep(500);
-    for (i = 0; i < NPACKS; i++) {
+    for (i = 0; i < NUM_PACKS; i++) {
         batt_hist_load_latest(&packs[i]);
     }
 
@@ -717,10 +679,10 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
         }
 
 #if DEBUG_PRINT
-        LOG_DBG("================================= loop %u, %u.%03u s", loop, ms / 1000, ms % 1000);
+        LOG_DBG("================================= loop %u, %u.%03u s", loop, (uint32_t)(ms / 1000), (uint32_t)(ms % 1000));
 #endif
 
-        for (i = 0; i < NPACKS; i++) {
+        for (i = 0; i < NUM_PACKS; i++) {
             LOG_DBG("Populating %s Data", packs[i].name);
 
             if (populate_pack_data(packs[i].dev, &packs[i].data) ) {
@@ -736,7 +698,7 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
         }
 #endif
 
-        for (i = 0; i < NPACKS; i++) {
+        for (i = 0; i < NUM_PACKS; i++) {
             update_battery_charging_state(&packs[i]);
         }
     }
@@ -746,7 +708,7 @@ void batt_close(void)
 {
     LOG_DBG("Terminating battery thread...");
 
-    for (int i = 0; i < NPACKS; i++) {
+    for (int i = 0; i < NUM_PACKS; i++) {
         // TODO: is there a way to stop a driver?
         // max17205Stop(packs[i].drv);
     }
