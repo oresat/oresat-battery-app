@@ -600,6 +600,9 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
     (void)p2;
     (void)p3;
     unsigned int i;
+    int rc;
+
+    LOG_INF("Starting battery thread");
 
 	packs[0].dev = DEVICE_DT_GET(DT_NODELABEL(pack1));
 	packs[1].dev = DEVICE_DT_GET(DT_NODELABEL(pack2));
@@ -608,17 +611,24 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
     console_init();
 
 	if (!device_is_ready(packs[0].dev)) {
-		printk("sensor: device pack1 not ready.\n");
+		LOG_ERR("sensor: device pack1 not ready.");
+        k_msleep(1000);
 		return;
 	}
 	if (!device_is_ready(packs[1].dev)) {
-		printk("sensor: device pack2 not ready.\n");
+		LOG_ERR("sensor: device pack2 not ready.");
+        k_msleep(1000);
 		return;
 	}
     if (!device_is_ready(led.port)) {
+        LOG_ERR("LED is not ready.");
+        k_msleep(1000);
         return;
     }
-    if (gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE)) {
+    rc = gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
+    if (rc) {
+        LOG_ERR("Error configuring LED output: %d", rc);
+        k_msleep(1000);
         return;
     }
 
@@ -706,7 +716,7 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
 
 void batt_close(void)
 {
-    LOG_DBG("Terminating battery thread...");
+    LOG_ERR("Terminating battery thread...");
 
     for (int i = 0; i < NUM_PACKS; i++) {
         // TODO: is there a way to stop a driver?

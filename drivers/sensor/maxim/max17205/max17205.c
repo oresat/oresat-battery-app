@@ -37,7 +37,7 @@ static int max17205_reg_read(const struct device *dev, uint16_t reg_addr, int16_
 
 	rc = i2c_burst_read_dt(I2C_DEV(cfg, reg_addr), REG_ADDR(reg_addr), i2c_data, 2);
 	if (rc < 0) {
-		LOG_ERR("Unable to read register 0x%02x", reg_addr);
+		LOG_ERR("Unable to read register 0x%02x: %d", reg_addr, rc);
 		return rc;
 	}
 	*valp = ((int16_t)i2c_data[1] << 8) | i2c_data[0];
@@ -59,8 +59,14 @@ static int max17205_reg_write(const struct device *dev, uint16_t reg_addr, int16
 {
 	const struct max17205_config *cfg = dev->config;
 	uint8_t i2c_data[3] = {REG_ADDR(reg_addr), val & 0xFF, (uint16_t)val >> 8};
+	int rc;
 
-	return i2c_write_dt(I2C_DEV(cfg, reg_addr), i2c_data, sizeof(i2c_data));
+	rc = i2c_write_dt(I2C_DEV(cfg, reg_addr), i2c_data, sizeof(i2c_data));
+	if (rc < 0) {
+		LOG_ERR("Unable to write register 0x%02x: %d", reg_addr, rc);
+	}
+
+	return rc;
 }
 
 /**
@@ -929,9 +935,11 @@ static int max17205_init(const struct device *dev)
 	k_msleep(MAX17205_T_POR_MS);
 
 	if (!device_is_ready(config->i2c.bus)) {
-		LOG_ERR("Bus device is not ready");
+		LOG_ERR("Bus device %s is not ready", config->i2c.bus->name);
 		return -ENODEV;
 	}
+
+	LOG_DBG("Starting up max17205 for %s", config->i2c.bus->name);
 
 	/* We later will chose which device to use based on the register address:
 	 * config->i2c or config->i2c_aux.
