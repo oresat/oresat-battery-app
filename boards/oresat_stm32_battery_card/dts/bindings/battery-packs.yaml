@@ -5,6 +5,11 @@ description: Oresat battery packs device
 compatible: "battery-packs"
 
 properties:
+  "#gpio-cells":
+    type: int
+    required: true
+    description: Number of items to expect in a GPIO specifier
+
   alert-gpios:
     type: phandle-array
     required: true
@@ -43,3 +48,4 @@ properties:
       Single output to request more power allowance so we can
       enable heaters.
 
+include: [base.yaml]

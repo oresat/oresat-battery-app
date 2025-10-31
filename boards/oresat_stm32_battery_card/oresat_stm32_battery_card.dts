@@ -7,8 +7,7 @@
 /dts-v1/;
 #include <st/f0/stm32f091Xc.dtsi>
 #include <st/f0/stm32f091r(b-c)tx-pinctrl.dtsi>
-/* #include "arduino_r3_connector.dtsi" */
-/* #include "st_morpho_connector.dtsi" */
+#include <zephyr/dt-bindings/gpio/gpio.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
@@ -53,16 +52,16 @@
 		};
 	};
 
-   battpacks: oresat_battery_packs {
-   	compatible = "battery-packs", "st-morpho-header";
-
-   	alert-gpios = <&gpiob 5 0>, <&gpiob 12 0>;
-   	charge-stat-oc-gpios = <&gpioa 7 0>, <&gpiob 10 0>;
-   	discharge-stat-oc-gpios = <&gpioa 1 0>, <&gpiob 11 0>;
-   	charge-disable-gpios = <&gpioa 4 GPIO_ACTIVE_HIGH>, <&gpiob 0 GPIO_ACTIVE_HIGH>;
-   	discharge-disable-gpios = <&gpioa 5 GPIO_ACTIVE_HIGH>, <&gpiob 1 GPIO_ACTIVE_HIGH>;
-   	heater-gpios = <&gpioc 14 GPIO_ACTIVE_HIGH>, <&gpioc 15 GPIO_ACTIVE_HIGH>;
-   	moarpwr-gpios = <&gpiob 15 GPIO_ACTIVE_HIGH>, <&gpiob 15 GPIO_ACTIVE_HIGH>;
+	battpacks: oresat_battery_packs {
+		compatible = "battery-packs";
+		#gpio-cells = <2>;
+		alert-gpios = <&gpiob 5 0>, <&gpiob 12 0>;
+		charge-stat-oc-gpios = <&gpioa 7 0>, <&gpiob 10 0>;
+		discharge-stat-oc-gpios = <&gpioa 1 0>, <&gpiob 11 0>;
+		charge-disable-gpios = <&gpioa 4 GPIO_ACTIVE_HIGH>, <&gpiob 0 GPIO_ACTIVE_HIGH>;
+		discharge-disable-gpios = <&gpioa 5 GPIO_ACTIVE_HIGH>, <&gpiob 1 GPIO_ACTIVE_HIGH>;
+		heater-gpios = <&gpioc 14 GPIO_ACTIVE_HIGH>, <&gpioc 15 GPIO_ACTIVE_HIGH>;
+		moarpwr-gpios = <&gpiob 15 GPIO_ACTIVE_HIGH>, <&gpiob 15 GPIO_ACTIVE_HIGH>;
 	};
 
 	aliases {
@@ -104,7 +103,7 @@
 	pinctrl-0 = <&usart1_tx_pb6 &usart1_rx_pb7>;
 	pinctrl-names = "default";
 	current-speed = <115200>;
-   status = "disabled";
+	status = "disabled";
 };
 
 &usart2 {
@@ -132,7 +131,7 @@
 		cell-bal-thresh-voltage = <40>;
 		pack-flags = <0x3e00>;
 		rsense-mohms = <10>;
-   	config = <0x0211>;
+		config = <0x0211>;
 		status = "okay";
 	};
 };
@@ -156,7 +155,7 @@
 		cell-bal-thresh-voltage = <40>;
 		pack-flags = <0x3e00>;
 		rsense-mohms = <10>;
-   	config = <0x0211>;
+		config = <0x0211>;
 		status = "okay";
 	};
 };
