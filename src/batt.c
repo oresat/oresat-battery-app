@@ -646,10 +646,10 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
 	for (i = 0; i < NUM_PACKS; i++) {
 		packs[i].updated = nv_ram_write(packs[i].dev, packs[i].name);
 
+#if 0 // VERBOSE_DEBUG
 		max17205_print_volatile_memory(packs[i].dev);
 		max17205_print_nonvolatile_memory(packs[i].dev);
-#if VERBOSE_DEBUG
-		//max17205_read_history(packs[i].dev);
+		max17205_read_history(packs[i].dev);
 #endif
 	}
 

@@ -6,7 +6,7 @@
 #include "batt.h"
 #include "calib.h"
 
-LOG_MODULE_REGISTER(calib, CONFIG_APP_BATTERY_LOG_LEVEL);
+LOG_MODULE_REGISTER(calib, 3); //CONFIG_APP_BATTERY_LOG_LEVEL);
 
 /*
   The values for batt_nv_programing_cfg are detailed in the google document "MAX17205 Register Values"
@@ -206,20 +206,20 @@ static int max17205_validate_registers(const struct device *dev, const max17205_
 
 	LOG_DBG("Current and expected NV settings:");
 	for (size_t i = 0; i < len; ++i) {
-		uint16_t buf[2] = {0, 0};
+		uint16_t buf;
 
-		int rc = max17205_reg_read(dev, list[i].reg, buf);
+		int rc = max17205_reg_read(dev, list[i].reg, &buf);
 
 		if (rc) {
 			return rc;
 		}
-		if (buf[0] != list[i].value) {
+		if (buf != list[i].value) {
 			LOG_WRN("   %-30s register 0x%04X is 0x%04X 	NOT the expected  0x%04X",
-				max17205_reg_to_str(list[i].reg), list[i].reg, buf[0], list[i].value);
+				max17205_reg_to_str(list[i].reg), list[i].reg, buf, list[i].value);
 			matches = false;
 		} else {
 			LOG_DBG("   %-30s register 0x%04X is 0x%04X 	CORRECT",
-				max17205_reg_to_str(list[i].reg), list[i].reg, buf[0]);
+				max17205_reg_to_str(list[i].reg), list[i].reg, buf);
 		}
 	}
 	*valid = matches;
@@ -277,15 +277,15 @@ int max17205_print_volatile_memory(const struct device *dev)
 
 int max17205_print_nonvolatile_memory(const struct device *dev)
 {
-	uint8_t num_left[4] = {0};
+	uint8_t num_left;
 	int rc;
 
-	rc = max17205_read_writes_remaining(dev, num_left);
+	rc = max17205_read_writes_remaining(dev, &num_left);
 	if (rc) {
 		return rc;
 	}
 
-	LOG_DBG("NV writes remaining: %u", num_left[0]);
+	LOG_DBG("NV writes remaining: %u", num_left);
 
 	// See table 19 on page 83 of the data sheet to see the list of non-volatile registers
 	LOG_DBG("MAX17205 Non-Volatile Registers");
@@ -382,12 +382,12 @@ int max17205_print_nonvolatile_memory(const struct device *dev)
 	};
 
 	for(size_t i = 0; i < ARRAY_LEN(reg_list); ++i) {
-		uint16_t buf[2] = {0};
-		rc = max17205_reg_read(dev, reg_list[i], buf);
+		uint16_t buf;
+		rc = max17205_reg_read(dev, reg_list[i], &buf);
 		if (rc) {
 			return rc;
 		}
-		LOG_DBG("   %-30s register 0x%04X is 0x%04X", max17205_reg_to_str(reg_list[i]), reg_list[i], buf[0]);
+		LOG_DBG("   %-30s register 0x%04X is 0x%04X", max17205_reg_to_str(reg_list[i]), reg_list[i], buf);
 	}
 	return 0;
 }
@@ -396,8 +396,8 @@ int max17205_read_history(const struct device *dev)
 {
 	int i;
 	int rc;
-	uint16_t write_flags[30];
-	uint16_t valid_flags[30];
+	uint16_t write_flags[26];
+	uint16_t valid_flags[26];
 	uint8_t page_good[203];
 
 	//Read all flag information from the IC
