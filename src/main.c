@@ -17,7 +17,7 @@ LOG_MODULE_REGISTER(app_battery, CONFIG_APP_BATTERY_LOG_LEVEL);
 #define CAN_BITRATE (DT_PROP_OR(DT_CHOSEN(zephyr_canbus), bitrate, \
 					 DT_PROP_OR(DT_CHOSEN(zephyr_canbus), bus_speed, CONFIG_CAN_DEFAULT_BITRATE) / 1000))
 
-#define BATT_THREAD_STACK_SIZE 512
+#define BATT_THREAD_STACK_SIZE 2048
 #define BATT_THREAD_PRIORITY 0
 
 static K_THREAD_STACK_DEFINE(batt_stack, BATT_THREAD_STACK_SIZE);
@@ -39,6 +39,7 @@ int main(void)
 	k_tid_t batt_thread = k_thread_create(&batt_thread_data, batt_stack, K_THREAD_STACK_SIZEOF(batt_stack),
 										  batt_thread_handler, NULL, NULL, NULL,
 										  BATT_THREAD_PRIORITY, 0, K_NO_WAIT);
+	k_thread_name_set(batt_thread, "battery_thread");
 
 // the battery thread is now running; wait until it exits, if ever, then clean up
 	k_thread_join(batt_thread, K_FOREVER);

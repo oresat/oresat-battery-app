@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-void batt_hist_init(void);
+int batt_hist_init(void);
 void batt_hist_load_latest(pack_t *pack);
 bool batt_hist_store_current(void);
 

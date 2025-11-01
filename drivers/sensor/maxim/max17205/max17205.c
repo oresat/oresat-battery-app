@@ -32,16 +32,13 @@ int max17205_hardware_reset(const struct device *dev);
 static int max17205_reg_read(const struct device *dev, uint16_t reg_addr, int16_t *valp)
 {
 	const struct max17205_config *cfg = dev->config;
-	uint8_t i2c_data[2];
 	int rc;
 
-	rc = i2c_burst_read_dt(I2C_DEV(cfg, reg_addr), REG_ADDR(reg_addr), i2c_data, 2);
+	rc = i2c_burst_read_dt(I2C_DEV(cfg, reg_addr), REG_ADDR(reg_addr), (uint8_t *)valp, 2);
 	if (rc < 0) {
 		LOG_ERR("Unable to read register 0x%02x: %d", reg_addr, rc);
 		return rc;
 	}
-	*valp = ((int16_t)i2c_data[1] << 8) | i2c_data[0];
-
 	return 0;
 }
 
@@ -900,12 +897,10 @@ static int max17205_attr_get(const struct device *dev,
 	default:
 		if ((unsigned int)attr >= MAX17205_ATTR_REGS) {
 			uint16_t reg_addr = (unsigned int)attr - MAX17205_ATTR_REGS;
-			int16_t rd_val;
-
 			if (reg_addr <= MAX17205_AD_MAXVALUE) {
-				rc = max17205_reg_read(dev, reg_addr, &rd_val);
-				val->val1 = ((int32_t)rd_val & 0x0ffffU);
+				val->val1 = 0;
 				val->val2 = 0;
+				rc = max17205_reg_read(dev, reg_addr, (int16_t *)&val->val1);
 			} else {
 				rc = -EINVAL;
 			}
@@ -994,24 +989,29 @@ static int max17205_init(const struct device *dev)
 
 	rc = max17205_reg_write(dev, MAX17205_AD_NPACKCFG, packcfg);
 	if (rc) {
+		LOG_ERR("Error writing AD_NPACKCFG: %d", rc);
 		return rc;
 	}
 
 	rc = max17205_reg_write(dev, MAX17205_AD_NRSENSE, config->rsense_mohms);
 	if (rc) {
+		LOG_ERR("Error writing AD_NRSENSE: %d", rc);
 		return rc;
 	}
 
 	rc = max17205_reg_write(dev, MAX17205_AD_CONFIG, config->config);
 	if (rc) {
+		LOG_ERR("Error writing AD_CONFIG: %d", rc);
 		return rc;
 	}
-
+#if 1
 	rc = max17205_firmware_reset(dev);
 	if (rc) {
+		LOG_ERR("Firmware reset error on max17205: %d", rc);
 		return rc;
 	}
-
+#endif
+	LOG_DBG("Initialized %s on %s", dev->name, config->i2c.bus->name);
 	return 0;
 }
 

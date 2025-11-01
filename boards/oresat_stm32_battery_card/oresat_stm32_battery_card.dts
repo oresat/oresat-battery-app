@@ -120,14 +120,14 @@
 	status = "okay";
 	clock-frequency = <I2C_BITRATE_FAST>;
 
-	pack1: max17205@6c {
+	pack1: max17205@36 {
 		compatible = "maxim,max17205";
-		reg = <0x6c>;
+		reg = <0x36>;
 		/* NOTE: this device has two I2C slave addresses. They are used to access
 		 * different sets of register addresses. Ensure your system does not place
 		 * another device on the I2C bus which responds to the below aux-addr.
 		 */
-		aux-addr = <0x16>;
+		aux-addr = <0x0b>;
 		num-cells = <2>;
 		cell-bal-thresh-voltage = <40>;
 		pack-flags = <0x3e00>;
@@ -144,14 +144,14 @@
 	status = "okay";
 	clock-frequency = <I2C_BITRATE_FAST>;
 
-	pack2: max17205@6c {
+	pack2: max17205@36 {
 		compatible = "maxim,max17205";
-		reg = <0x6c>;
+		reg = <0x36>;
 		/* NOTE: this device has two I2C slave addresses. They are used to access
 		 * different sets of register addresses. Ensure your system does not place
 		 * another device on the I2C bus which responds to the below aux-addr.
 		 */
-		aux-addr = <0x16>;
+		aux-addr = <0x0b>;
 		num-cells = <2>;
 		cell-bal-thresh-voltage = <40>;
 		pack-flags = <0x3e00>;
@@ -196,16 +196,16 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 
-		/* Set 4Kb of storage just before storage_partition defined below */
+		/* Set 8Kb of storage just before storage_partition defined below */
 		hist_partition: partition@3e000 {
 			label = "hist";
-			reg = <0x0003e000 DT_SIZE_K(4)>;
+			reg = <0x0003e000 DT_SIZE_K(8)>;
 		};
 		/* Set 4Kb of storage at the end of the 256Kb of flash */
-		storage_partition: partition@3f000 {
+		/*storage_partition: partition@3f000 {
 			label = "storage";
 			reg = <0x0003f000 DT_SIZE_K(4)>;
-		};
+		};*/
 	};
 };
 

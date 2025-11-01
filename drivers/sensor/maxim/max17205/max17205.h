@@ -1108,6 +1108,7 @@ struct max17205_config {
 	uint16_t rsense_mohms;
 	/* AD_CONFIG reg value */
 	uint16_t config;
+	bool in_init;
 };
 
 /**
