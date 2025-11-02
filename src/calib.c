@@ -6,7 +6,7 @@
 #include "batt.h"
 #include "calib.h"
 
-LOG_MODULE_REGISTER(calib, 3); //CONFIG_APP_BATTERY_LOG_LEVEL);
+LOG_MODULE_REGISTER(calib, CONFIG_APP_BATTERY_LOG_LEVEL);
 
 /*
   The values for batt_nv_programing_cfg are detailed in the google document "MAX17205 Register Values"

@@ -105,7 +105,7 @@ static void runtime_entry_print(runtime_battery_data_t *data, unsigned int start
 #if DEBUG_PRINT
 	(void)data;
 #endif
-	LOG_DBG("%srst_cycle=%d, minute=%d, unused=%d, estimated=%d, crc=0x%08X",
+	LOG_DBG("%srst_cycle=%d, minute=%d, unused=%d, estimated=%d, crc=0x%04X",
 			prefix ? prefix : "",
 			data->rst_cycle, data->minute, data->unused, data->estimated, data->crc);
 	for (unsigned int j = start; j < start + count; j++) {
@@ -120,7 +120,7 @@ static void batt_hist_find_last(void)
 #if VERBOSE_DEBUG
 	char prefix[10];
 #endif
-	uint32_t check_crc;
+	uint16_t check_crc;
 	int rc;
 
 	memset(&last_valid_history_entry, 0, sizeof(last_valid_history_entry));
@@ -149,7 +149,7 @@ static void batt_hist_find_last(void)
 		snprintk(prefix, sizeof(prefix), "%d. ", i);
 		runtime_entry_print(&data, 0, NUM_PACKS, prefix);
 #endif // VERBOSE_DEBUG
-		check_crc = crc32_ieee((uint8_t *)&data, sizeof(data) - sizeof(data.crc));
+		check_crc = crc16_ccitt(0, (uint8_t *)&data, sizeof(data) - sizeof(data.crc));
 
 		if (check_crc == data.crc) {
 			last_valid_history_entry = data;
@@ -229,7 +229,7 @@ static void batt_hist_create(runtime_battery_data_t *dest)
 	dest->minute = k_uptime_seconds() / 60;
 	dest->unused = 0;
 	dest->estimated = false;
-	dest->crc = crc32_ieee((uint8_t *)dest, sizeof(*dest) - sizeof(dest->crc));
+	dest->crc = crc16_ccitt(0, (uint8_t *)dest, sizeof(*dest) - sizeof(dest->crc));
 }
 
 static bool batt_hist_add_next(runtime_battery_data_t *new_data)

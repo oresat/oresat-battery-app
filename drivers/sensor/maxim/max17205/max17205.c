@@ -14,8 +14,8 @@ LOG_MODULE_REGISTER(max17205, CONFIG_SENSOR_LOG_LEVEL);
 #include "max17205.h"
 
 #define DT_DRV_COMPAT maxim_max17205
-#define I2C_DEV(cfg, reg) (((reg) > 0xFFU) ? &(cfg)->i2c_aux : &(cfg)->i2c)
-#define REG_ADDR(reg) ((reg) & 0xFFU)
+//#define I2C_DEV(cfg, reg) (((reg) > 0x00FFU) ? &((cfg)->i2c_aux) : &((cfg)->i2c))
+#define REG_ADDR(reg) ((reg) & 0x00FFU)
 
 int max17205_hardware_reset(const struct device *dev);
 
@@ -32,9 +32,14 @@ int max17205_hardware_reset(const struct device *dev);
 static int max17205_reg_read(const struct device *dev, uint16_t reg_addr, int16_t *valp)
 {
 	const struct max17205_config *cfg = dev->config;
+	struct i2c_dt_spec spec = {.bus = cfg->i2c.bus, .addr = cfg->i2c.addr};
 	int rc;
 
-	rc = i2c_burst_read_dt(I2C_DEV(cfg, reg_addr), REG_ADDR(reg_addr), (uint8_t *)valp, 2);
+	if (reg_addr > 0x00FFU) {
+		spec.addr = cfg->aux_addr;
+	}
+
+	rc = i2c_burst_read_dt(&spec, REG_ADDR(reg_addr), (uint8_t *)valp, 2);
 	if (rc < 0) {
 		LOG_ERR("Unable to read register 0x%02x: %d", reg_addr, rc);
 		return rc;
@@ -56,9 +61,14 @@ static int max17205_reg_write(const struct device *dev, uint16_t reg_addr, int16
 {
 	const struct max17205_config *cfg = dev->config;
 	uint8_t i2c_data[3] = {REG_ADDR(reg_addr), val & 0xFF, (uint16_t)val >> 8};
+	struct i2c_dt_spec spec = {.bus = cfg->i2c.bus, .addr = cfg->i2c.addr};
 	int rc;
 
-	rc = i2c_write_dt(I2C_DEV(cfg, reg_addr), i2c_data, sizeof(i2c_data));
+	if (reg_addr > 0x00FFU) {
+		spec.addr = cfg->aux_addr;
+	}
+
+	rc = i2c_write_dt(&spec, i2c_data, sizeof(i2c_data));
 	if (rc < 0) {
 		LOG_ERR("Unable to write register 0x%02x: %d", reg_addr, rc);
 	}

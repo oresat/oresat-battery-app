@@ -644,11 +644,14 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
 	check_for_critically_low_batteries();
 
 	for (i = 0; i < NUM_PACKS; i++) {
+		LOG_INF("**** PACK %d ****", i + 1);
 		packs[i].updated = nv_ram_write(packs[i].dev, packs[i].name);
 
-#if 0 // VERBOSE_DEBUG
+		LOG_INF("**** PACK %d ****", i + 1);
 		max17205_print_volatile_memory(packs[i].dev);
+		LOG_INF("**** PACK %d ****", i + 1);
 		max17205_print_nonvolatile_memory(packs[i].dev);
+#if 0 // VERBOSE_DEBUG
 		max17205_read_history(packs[i].dev);
 #endif
 	}
