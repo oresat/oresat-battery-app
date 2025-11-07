@@ -1085,13 +1085,13 @@ struct max17205_data {
 };
 
 // TODO put this in the device tree in the pack_flags field
+// Enable:
+//    Vbatt channel
+//    voltage measurements cell1, cell2, Vbatt
+//    die temperature measurement
+//    AIN1 channel temperature measurement
+//    AIN2 channel temperature measurement
 #define MAX17205_PACKCFG_VAL	(MAX17205_PACKCFG_BTEN | MAX17205_PACKCFG_CHEN | MAX17205_PACKCFG_TDEN | MAX17205_PACKCFG_A1EN | MAX17205_PACKCFG_A2EN)
-
-// enable Vbatt channel
-// enable voltage measurements cell1, cell2, Vbatt
-// enable die temperature measurement
-// enable AIN1 channel temperature measurement
-// enable AIN2 channel temperature measurement
 
 struct max17205_config {
 	struct i2c_dt_spec i2c;

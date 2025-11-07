@@ -93,14 +93,15 @@ static void convert_millis(struct sensor_value *val, int32_t val_millis)
 static void convert_capacity(uint16_t rsense_mohms, const uint16_t raw, struct sensor_value *valp)
 {
 	// Reference datasheet table 1: Capacity LSB is 5.0μVh/RSENSE where Vh/R=Ah, unsigned.
-	valp->val1 = ((uint32_t)raw * 5000U) / rsense_mohms;
+	valp->val1 = ((uint32_t)raw * 5000U) / (rsense_mohms * 1000U);
 	valp->val2 = 0;
+	LOG_DBG("Capacity: raw:%u, rsense_mohms: %u; val1 = %u", raw, rsense_mohms, valp->val1);
 }
 
 uint16_t encode_capacity(uint16_t rsense_mohms, uint32_t dest_mAh)
 {
 	// Reference datasheet table 1: Capacity LSB is 5.0μVh/RSENSE where Vh/R=Ah, unsigned.
-	return (uint16_t)((dest_mAh * rsense_mohms) / 5000U);
+	return (uint16_t)((dest_mAh * rsense_mohms * 1000U) / 5000U);
 }
 
 /**
@@ -179,8 +180,9 @@ static void convert_min_voltage(uint16_t raw, struct sensor_value *valp)
 static void convert_current(uint16_t rsense_mohms, uint16_t raw, struct sensor_value *valp)
 {
 	// Referencce datasheet table 1: Current LSB is 1.5625μV/RSENSE, signed.
-	valp->val1 = (int16_t)((((int32_t)((int16_t)raw)) * 15625) / (rsense_mohms * 10));
+	valp->val1 = (int16_t)((((int32_t)((int16_t)raw)) * 15625) / ((int32_t)rsense_mohms * 10000));
 	valp->val2 = 0;
+	LOG_DBG("Current: raw:%d, rsense_mohms: %u; val1 = %d", raw, rsense_mohms, (int16_t)valp->val1);
 }
 
 /**
@@ -194,7 +196,7 @@ static void convert_max_current(uint16_t rsense_mohms, uint16_t raw, struct sens
 	// LSB of 0.40mV/RSENSE.
 	int32_t max_raw = ((raw >> 8) * 0xFFU) & 0xFFU;
 
-	valp->val1 = (int16_t)((max_raw * 400) / rsense_mohms);
+	valp->val1 = (int16_t)((max_raw * 400) / ((int32_t)rsense_mohms * 1000));
 	valp->val2 = 0;
 }
 
@@ -209,7 +211,7 @@ static void convert_min_current(uint16_t rsense_mohms, uint16_t raw, struct sens
 	// LSB of 0.40mV/RSENSE.
 	int32_t min_raw = raw & 0xFFU;
 
-	valp->val1 = (int16_t)((min_raw * 400) / rsense_mohms);
+	valp->val1 = (int16_t)((min_raw * 400) / ((int32_t)rsense_mohms * 1000));
 	valp->val2 = 0;
 }
 
@@ -997,18 +999,22 @@ static int max17205_init(const struct device *dev)
 	uint16_t packcfg = _VAL2FLD(MAX17205_PACKCFG_NCELLS, config->num_cells) |
 					   bal_val | config->pack_flags;
 
+	LOG_DBG("Writing AD_NPACKCFG = 0x%04x (cell_bal_thresh_voltage = %u, num_cells = %u, flags = 0x%04x)",
+			packcfg, config->cell_bal_thresh_voltage, config->num_cells, config->pack_flags);
 	rc = max17205_reg_write(dev, MAX17205_AD_NPACKCFG, packcfg);
 	if (rc) {
 		LOG_ERR("Error writing AD_NPACKCFG: %d", rc);
 		return rc;
 	}
 
+	LOG_DBG("Writing AD_NRSENSE = 0x%04x", config->rsense_mohms);
 	rc = max17205_reg_write(dev, MAX17205_AD_NRSENSE, config->rsense_mohms);
 	if (rc) {
 		LOG_ERR("Error writing AD_NRSENSE: %d", rc);
 		return rc;
 	}
 
+	LOG_DBG("Writing AD_CONFIG = 0x%04x", config->config);
 	rc = max17205_reg_write(dev, MAX17205_AD_CONFIG, config->config);
 	if (rc) {
 		LOG_ERR("Error writing AD_CONFIG: %d", rc);
