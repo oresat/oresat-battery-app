@@ -118,7 +118,7 @@ static void batt_hist_find_last(void)
 	runtime_battery_data_t data;
 	struct fcb_entry loc = {0};
 #if VERBOSE_DEBUG
-	char prefix[10];
+	char prefix[60];
 #endif
 	uint16_t check_crc;
 	int rc;
@@ -146,7 +146,8 @@ static void batt_hist_find_last(void)
 			break;
 		}
 #if VERBOSE_DEBUG
-		snprintk(prefix, sizeof(prefix), "%d. ", i);
+		snprintk(prefix, sizeof(prefix), "%d. sect_ofs=0x%08x, data_ofs=0x%04x ", i,
+				 (unsigned int)loc.fe_sector->fs_off, loc.fe_data_off);
 		runtime_entry_print(&data, 0, NUM_PACKS, prefix);
 #endif // VERBOSE_DEBUG
 		check_crc = crc16_ccitt(0, (uint8_t *)&data, sizeof(data) - sizeof(data.crc));
@@ -242,7 +243,8 @@ static bool batt_hist_add_next(runtime_battery_data_t *new_data)
 		LOG_ERR("Error on fcb_append(): %d", rc);
 		return false;
 	}
-	rc = fcb_flash_write(&hist_fcb, last_valid_loc.fe_sector, last_valid_loc.fe_data_off, new_data, last_valid_loc.fe_data_len);
+	rc = fcb_flash_write(&hist_fcb, last_valid_loc.fe_sector, last_valid_loc.fe_data_off,
+						 new_data, last_valid_loc.fe_data_len);
 	if (rc) {
 		LOG_ERR("Error on fcb_flash_write(): %d", rc);
 		ok = false;
@@ -261,6 +263,8 @@ static bool batt_hist_add_next(runtime_battery_data_t *new_data)
 bool batt_hist_store_current(void)
 {
 	runtime_battery_data_t new_data;
+	char prefix[60] = "";
+	bool ret = false;
 
 #if CONFIG_HIST_STORE_PROMPT
 	LOG_DBG("********** Store batt_hist e(rase), y(es), n(o)? ");
@@ -280,13 +284,18 @@ bool batt_hist_store_current(void)
 	batt_hist_create(&new_data);
 
 	LOG_DBG("Storing new runtime battery entry:");
-	runtime_entry_print(&new_data, 0, NUM_PACKS, NULL);
 
 	if (batt_hist_add_next(&new_data)) {
+#if VERBOSE_DEBUG
+			snprintk(prefix, sizeof(prefix), "sect_ofs=0x%08x, data_ofs=0x%04x ",
+					 (unsigned int)last_valid_loc.fe_sector->fs_off, last_valid_loc.fe_data_off);
+#endif
 			LOG_DBG("Done.");
-			return true;
+			ret = true;
+	} else {
+		LOG_DBG("ERROR: Unable to store current battery history.");
 	}
-	LOG_DBG("ERROR: Unable to store current battery history.");
-	return false;
+	runtime_entry_print(&new_data, 0, NUM_PACKS, prefix);
+	return ret;
 }
 
