@@ -23,6 +23,7 @@
 // TODO:
 // - re-review writes to N-version of registers vs. non-N
 // - do we need to still deal with PACKCFG here? done in the driver now <-- remove once tested to confirm driver is working
+// - TEST CAN INTERFACE
 
 LOG_MODULE_DECLARE(app_battery, CONFIG_APP_BATTERY_LOG_LEVEL);
 

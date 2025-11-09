@@ -15,6 +15,9 @@
 #include "hist.h"
 #include "calib.h"
 
+// TODO:
+// - test history wrap-around
+
 LOG_MODULE_REGISTER(hist, CONFIG_APP_BATTERY_LOG_LEVEL);
 
 // raw register values to store at runtime per pack;
@@ -48,7 +51,7 @@ static struct fcb_entry last_valid_loc;
 static uint16_t reset_cycle_count;
 static struct fcb hist_fcb;
 
-static void batt_hist_find_last(void);
+static int batt_hist_find_last(void);
 
 int batt_hist_init(void)
 {
@@ -95,7 +98,7 @@ int batt_hist_init(void)
 		LOG_ERR("Error initializing battery history FCB: %d", rc);
 	} else {
 		LOG_DBG("Battery history FCB initialized");
-		batt_hist_find_last();
+		rc = batt_hist_find_last();
 	}
 	return rc;
 }
@@ -113,7 +116,7 @@ static void runtime_entry_print(runtime_battery_data_t *data, unsigned int start
 	}
 }
 
-static void batt_hist_find_last(void)
+static int batt_hist_find_last(void)
 {
 	runtime_battery_data_t data;
 	struct fcb_entry loc = {0};
@@ -131,14 +134,18 @@ static void batt_hist_find_last(void)
 
 	if (fcb_is_empty(&hist_fcb)) {
 		LOG_INF("Runtime battery history is empty.");
-		return;
+		return 0;
 	}
 
 	for (unsigned int i = 0; i < NUM_BATT_HIST_ENTRIES; i++) {
 		rc = fcb_getnext(&hist_fcb, &loc);
-		if (rc) {
-			LOG_ERR("Error getting next FCB entry: %d", rc);
-			break;
+		if (rc == -ENOTSUP) {
+            LOG_DBG("End of history.");
+            break;
+        }
+        else if (rc) {
+            LOG_ERR("Error getting next FCB entry: %d", rc);
+			    break;
 		}
 		rc = fcb_flash_read(&hist_fcb, loc.fe_sector, loc.fe_data_off, &data, loc.fe_data_len);
 		if (rc) {
@@ -168,7 +175,9 @@ static void batt_hist_find_last(void)
 
 		// We have started a new cycle, so advance this counter once
 		reset_cycle_count++;
+        return 0;
 	}
+    return rc;
 }
 
 static void batt_hist_utilize(runtime_battery_data_t *src, pack_t *pack)
@@ -239,7 +248,17 @@ static bool batt_hist_add_next(runtime_battery_data_t *new_data)
 	bool ok = true;
 
 	rc = fcb_append(&hist_fcb, sizeof(runtime_battery_data_t), &last_valid_loc);
-	if (rc) {
+    if (rc == -ENOSPC) {
+        rc = fcb_rotate(&hist_fcb);
+        if (rc) {
+            LOG_ERR("Error on fcb_rotate(): %d", rc);
+            return false;
+        }
+        rc = fcb_append(&hist_fcb, sizeof(runtime_battery_data_t), &last_valid_loc);
+    }
+
+    if (rc)
+    {
 		LOG_ERR("Error on fcb_append(): %d", rc);
 		return false;
 	}
@@ -260,6 +279,29 @@ static bool batt_hist_add_next(runtime_battery_data_t *new_data)
 	return ok;
 }
 
+static bool batt_hist_erase(void)
+{
+    //flash_area_erase(HIST_PARTITION, 0, HIST_PARTITION_SIZE);
+    return fcb_clear(&hist_fcb) == 0;
+}
+
+static bool batt_hist_test(void)
+{
+
+/*
+- erase all
+- repeatedly:
+    - write large prime number of entries, keeping track of total written, with
+      the fields in the entry growing predictably between each write
+    - check return value of batt_hist_find_last()
+    - confirm last_valid_history_entry matches the last one written
+    - keep going until we've gone at least 2 * NUM_BATT_HIST_ENTRIES
+*/
+    LOG_INF("Test failed.");
+    return false;
+}
+
+
 bool batt_hist_store_current(void)
 {
 	runtime_battery_data_t new_data;
@@ -267,18 +309,24 @@ bool batt_hist_store_current(void)
 	bool ret = false;
 
 #if CONFIG_HIST_STORE_PROMPT
-	LOG_DBG("********** Store batt_hist e(rase), y(es), n(o)? ");
-	uint8_t ch = console_getchar(); // TODO: Zephyr console does not have a read timeout; switch to shell
+    for (;;) {
+        LOG_DBG("********** Store batt_hist e(rase), t(est), y(es), n(o)? ");
+        uint8_t ch = console_getchar(); // TODO: Zephyr console does not have a read timeout; switch to shell
 
-	LOG_DBG("");
-	if (ch == 'e') {
-		LOG_DBG("Erasing *************");
-		flash_area_erase(HIST_PARTITION, 0, HIST_PARTITION_SIZE);
-		return true;
-	} else if (ch != 'y') {
-		LOG_DBG("Not storing ************");
-		return true;
-	}
+        LOG_DBG("");
+        if (ch == 'e') {
+            LOG_DBG("Erasing *************");
+            batt_hist_erase();
+            return true;
+        } else if (ch == 't') {
+            LOG_INF("Testing *************");
+            batt_hist_test();
+        } else if (ch != 'y') {
+            LOG_DBG("Not storing ************");
+            return true;
+        }
+        break;
+    }
 #endif // CONFIG_HIST_STORE_PROMPT
 
 	batt_hist_create(&new_data);
