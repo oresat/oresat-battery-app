@@ -2,7 +2,7 @@
 #define _BATT_H_
 
 // Dump complete battery history
-#if IS_ENABLED(CONFIG_APP_BATTERY_LOG_LEVEL_DBG)
+#if IS_ENABLED(CONFIG_VERBOSE_DEBUG)
 #define VERBOSE_DEBUG 1
 #else
 #define VERBOSE_DEBUG 0

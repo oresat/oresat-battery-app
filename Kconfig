@@ -3,11 +3,16 @@ source "Kconfig.zephyr"
 endmenu
 
 config ACCESS_FLASH_STM32
-  default y
-  bool
-  depends on SOC_STM32F091XC
-  select USE_STM32_HAL_FLASH
-  select USE_STM32_HAL_FLASH_EX
+	default y
+	bool
+	depends on SOC_STM32F091XC
+	select USE_STM32_HAL_FLASH
+	select USE_STM32_HAL_FLASH_EX
+
+config VERBOSE_DEBUG
+	bool "Enables even more debug info than DBG log level"
+	help
+	  Dump extra verbose information.
 
 config ENABLE_NV_MEMORY_UPDATE_CODE
 	bool "Enable writes to MAX17205 NV"

@@ -77,6 +77,7 @@ STATIC_ASSERT(NUM_PACKS == 2);
 #define CALIB_INTERVAL_MS 120000 // 2 minutes
 #define RUNTIME_BATT_STORE_INTERVAL_MS 300000U // 5 minutes
 #define LED_TOGGLE_INTERVAL_MS 500 // 0.5 seconds
+#define DATA_INTERVAL_MS 4000 // 4 seconds
 #define BATT_TASK_SLEEP_INTERVAL_MS 10
 
 typedef enum {
@@ -507,6 +508,7 @@ static void populate_od_pack_data(pack_t *pack)
 		state_bitmask |= (1 << STATUS_BIT_CHG_STAT);
 	}
 
+	CO_LOCK_OD(CO->CANmodule);
 	if (pack->pack_number == 1) {
 		OD_RAM.x4000_pack_1.status = state_bitmask;
 		OD_RAM.x4000_pack_1.vbatt = MIN(pack_data->batt_mV, UINT16_MAX);
@@ -556,6 +558,7 @@ static void populate_od_pack_data(pack_t *pack)
 	} else {
 		LOG_DBG("ERROR: pack number not expected: %d", pack->pack_number);
 	}
+	CO_UNLOCK_OD(CO->CANmodule);
 }
 
 static bool are_batteries_critically_low(void)
@@ -650,9 +653,9 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
 
 		LOG_INF("**** PACK %d ****", i + 1);
 		max17205_print_volatile_memory(packs[i].dev);
+#if VERBOSE_DEBUG
 		LOG_INF("**** PACK %d ****", i + 1);
 		max17205_print_nonvolatile_memory(packs[i].dev);
-#if 0 // VERBOSE_DEBUG
 		max17205_read_history(packs[i].dev);
 #endif
 	}
@@ -666,9 +669,11 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
 
 	uint32_t loop = 0;
 	int64_t ms = 0;
-	int64_t next_hist_update_ms = RUNTIME_BATT_STORE_INTERVAL_MS + k_uptime_get();
-	int64_t next_led_update_ms = LED_TOGGLE_INTERVAL_MS + k_uptime_get();
-	int64_t next_calib_update_ms = CALIB_INTERVAL_MS + k_uptime_get();
+	int64_t now = k_uptime_get();
+	int64_t next_hist_update_ms = RUNTIME_BATT_STORE_INTERVAL_MS + now;
+	int64_t next_led_update_ms = LED_TOGGLE_INTERVAL_MS + now;
+	int64_t next_calib_update_ms = CALIB_INTERVAL_MS + now;
+	int64_t next_data_update_ms = DATA_INTERVAL_MS + now;
 
 	LOG_INF("Entering main battery loop");
 	for (;;) {
@@ -687,11 +692,12 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
 		if (ms >= next_led_update_ms) {
 			next_led_update_ms = ms + LED_TOGGLE_INTERVAL_MS;
 			gpio_pin_toggle_dt(&led);
+		}
+
+		if (ms >= next_data_update_ms) {
+			next_data_update_ms = ms + DATA_INTERVAL_MS;
 			loop++;
-			if (loop % 2 == 0) {
-				continue; // we want light to blink at 2Hz, but code to run at 1Hz
-			}
-			// else falls through
+			// fall through
 		} else {
 			k_msleep(BATT_TASK_SLEEP_INTERVAL_MS);
 			continue;
@@ -704,8 +710,6 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
 
 			if (populate_pack_data(packs[i].dev, &packs[i].data) ) {
 				populate_od_pack_data(&packs[i]);
-			} else {
-				// TODO: do we need to keep this around? Adding the loop results in the wrong error code on pack 2.
 			}
 		}
 
