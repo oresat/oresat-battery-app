@@ -6,6 +6,7 @@
 #include <canopennode.h>
 #include <OD.h>
 #include <oresat.h>
+#include <board_sensors.h>
 
 #include "batt.h"
 #include "calib.h"
@@ -709,7 +710,12 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
 			LOG_INF("Populating %s Data", packs[i].name);
 
 			if (populate_pack_data(packs[i].dev, &packs[i].data) ) {
-				populate_od_pack_data(&packs[i]);
+				if (canopennode_is_running()) {
+					board_sensors_fill_od();
+					populate_od_pack_data(&packs[i]);
+				} else {
+					LOG_WRN("CANopenNode is not running!");
+				}
 			}
 		}
 

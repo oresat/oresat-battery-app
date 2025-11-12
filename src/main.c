@@ -31,7 +31,7 @@ int main(void)
 
 	oresat_fix_pdo_cob_ids(node_id);
 
-	LOG_DBG("Opening CAN");
+	LOG_DBG("Openning CAN");
 	canopennode_init(CAN_INTERFACE, CAN_BITRATE, node_id);
 	LOG_DBG("Initializing sensors");
 	board_sensors_init();
@@ -41,10 +41,11 @@ int main(void)
 										  BATT_THREAD_PRIORITY, 0, K_NO_WAIT);
 	k_thread_name_set(batt_thread, "battery_thread");
 
-// the battery thread is now running; wait until it exits, if ever, then clean up
+	// the battery thread is now running; wait until it exits, if ever, then clean up
 	k_thread_join(batt_thread, K_FOREVER);
 	k_thread_stack_free(batt_stack);
 
+	LOG_INF("Stopping CAN");
 	canopennode_stop(CAN_INTERFACE);
 	sys_reboot(SYS_REBOOT_COLD);
 	LOG_INF("Done.");
