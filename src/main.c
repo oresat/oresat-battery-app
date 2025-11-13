@@ -15,7 +15,8 @@ LOG_MODULE_REGISTER(app_battery, CONFIG_APP_BATTERY_LOG_LEVEL);
 
 #define CAN_INTERFACE (DEVICE_DT_GET(DT_CHOSEN(zephyr_canbus)))
 #define CAN_BITRATE (DT_PROP_OR(DT_CHOSEN(zephyr_canbus), bitrate, \
-					 DT_PROP_OR(DT_CHOSEN(zephyr_canbus), bus_speed, CONFIG_CAN_DEFAULT_BITRATE) / 1000))
+					 DT_PROP_OR(DT_CHOSEN(zephyr_canbus), bus_speed, \
+					            CONFIG_CAN_DEFAULT_BITRATE) / 1000))
 
 #define BATT_THREAD_STACK_SIZE 2048
 #define BATT_THREAD_PRIORITY 0

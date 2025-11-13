@@ -110,6 +110,8 @@ static battery_heating_state_machine_state_t current_battery_state_machine_state
 #define BP_NODE DT_NODELABEL(battpacks)
 
 static const struct gpio_dt_spec moarpwr = GPIO_DT_SPEC_GET(BP_NODE, moarpwr_gpios);
+static const struct gpio_dt_spec can_shutdown = GPIO_DT_SPEC_GET(BP_NODE, can_shutdown_gpios);
+static const struct gpio_dt_spec can_silent = GPIO_DT_SPEC_GET(BP_NODE, can_silent_gpios);
 
 static pack_t packs[NUM_PACKS] = {
 	{
@@ -189,6 +191,16 @@ static int heaters_init(void)
 		return ret;
 	}
 
+	ret = gpio_pin_configure_dt(&can_shutdown, GPIO_OUTPUT_INACTIVE);
+	if (ret) {
+		return ret;
+	}
+
+	ret = gpio_pin_configure_dt(&can_silent, GPIO_OUTPUT_INACTIVE);
+	if (ret) {
+		return ret;
+	}
+
 	for (pack = 0; pack < NUM_PACKS; pack++) {
 		ret = gpio_pin_configure_dt(&packs[pack].heater_on, GPIO_OUTPUT_INACTIVE);
 		if (ret) {
@@ -202,15 +214,15 @@ static int heaters_init(void)
 		if (ret) {
 			return ret;
 		}
-		ret = gpio_pin_configure_dt(&packs[pack].line_chg_stat, GPIO_INPUT);
+		ret = gpio_pin_configure_dt(&packs[pack].line_chg_stat, GPIO_INPUT | GPIO_PULL_UP);
 		if (ret) {
 			return ret;
 		}
-		ret = gpio_pin_configure_dt(&packs[pack].line_dchg_stat, GPIO_INPUT);
+		ret = gpio_pin_configure_dt(&packs[pack].line_dchg_stat, GPIO_INPUT | GPIO_PULL_UP);
 		if (ret) {
 			return ret;
 		}
-		ret = gpio_pin_configure_dt(&packs[pack].line_alert, GPIO_INPUT);
+		ret = gpio_pin_configure_dt(&packs[pack].line_alert, GPIO_INPUT | GPIO_PULL_UP);
 		if (ret) {
 			return ret;
 		}
@@ -306,6 +318,7 @@ static void update_battery_charging_state(const pack_t *pack)
 {
 	LOG_DBG("LINE_DCHG_STAT_PK%d = %u", pack->pack_number, gpio_pin_get_dt(&pack->line_dchg_stat));
 	LOG_DBG("LINE_CHG_STAT_PK%d  = %u", pack->pack_number, gpio_pin_get_dt(&pack->line_chg_stat));
+	LOG_DBG("LINE_ALERT_PK%d     = %u", pack->pack_number, gpio_pin_get_dt(&pack->line_alert));
 
 #if CONFIG_ENABLE_CHARGING_CONTROL
 	const batt_pack_data_t * const pk_data = &pack->data;
@@ -647,6 +660,7 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
 	heaters_on(false);
 
 	check_for_critically_low_batteries();
+	k_msleep(3000);
 
 	for (i = 0; i < NUM_PACKS; i++) {
 		LOG_INF("**** PACK %d ****", i + 1);
@@ -716,6 +730,8 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
 				} else {
 					LOG_WRN("CANopenNode is not running!");
 				}
+			} else {
+				LOG_WRN("Data not valid!");
 			}
 		}
 

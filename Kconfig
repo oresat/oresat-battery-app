@@ -8,6 +8,7 @@ config ACCESS_FLASH_STM32
 	depends on SOC_STM32F091XC
 	select USE_STM32_HAL_FLASH
 	select USE_STM32_HAL_FLASH_EX
+	select USE_STM32_HAL_CAN
 
 config VERBOSE_DEBUG
 	bool "Enables even more debug info than DBG log level"

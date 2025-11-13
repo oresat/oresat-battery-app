@@ -48,4 +48,15 @@ properties:
       Single output to request more power allowance so we can
       enable heaters.
 
+  can-shutdown-gpios:
+    type: phandle-array
+    description: |
+      Single output, active high, to shutdown CAN. This is the
+      lowest power mode.
+
+  can-silent-gpios:
+    type: phandle-array
+    description: |
+      Single output, active high, to turn of TX (receive only).
+
 include: [base.yaml]

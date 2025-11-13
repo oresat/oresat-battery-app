@@ -61,7 +61,9 @@
 		charge-disable-gpios = <&gpioa 4 GPIO_ACTIVE_HIGH>, <&gpiob 0 GPIO_ACTIVE_HIGH>;
 		discharge-disable-gpios = <&gpioa 5 GPIO_ACTIVE_HIGH>, <&gpiob 1 GPIO_ACTIVE_HIGH>;
 		heater-gpios = <&gpioc 14 GPIO_ACTIVE_HIGH>, <&gpioc 15 GPIO_ACTIVE_HIGH>;
-		moarpwr-gpios = <&gpiob 15 GPIO_ACTIVE_HIGH>, <&gpiob 15 GPIO_ACTIVE_HIGH>;
+		moarpwr-gpios = <&gpiob 15 GPIO_ACTIVE_HIGH>;
+		can-shutdown-gpios = <&gpioa 10 GPIO_ACTIVE_HIGH>;
+		can-silent-gpios = <&gpioa 9 GPIO_ACTIVE_HIGH>;
 	};
 
 	aliases {
