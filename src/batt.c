@@ -582,31 +582,43 @@ static void populate_od_pack_data(pack_t *pack)
 static bool are_batteries_critically_low(void)
 {
 	unsigned int i;
+	bool critically_low = false;
 
 	for (i = 0; i < NUM_PACKS; i++) {
 		if ((packs[i].data.v_cell_1_mV < SHUTDOWN_MV) || (packs[i].data.v_cell_2_mV < SHUTDOWN_MV)) {
-			LOG_DBG("Batteries are critically low!");
-			return true;
+			LOG_WRN("Batteries are critically low! Pack %u Cell 1:%u mV, Cell 2:%u mV Batt:%u mV", i + 1,
+					packs[i].data.v_cell_1_mV, packs[i].data.v_cell_2_mV, packs[i].data.batt_mV);
+			critically_low = true;
 		}
 	}
 
-	LOG_DBG("Batteries are not critically low");
-	return false;
+	if (!critically_low) {
+		LOG_DBG("Batteries are not critically low");
+	}
+	return critically_low;
 }
 
 static bool check_for_critically_low_batteries(void)
 {
 	int rc;
 	unsigned int i;
+	uint16_t v1;
+	uint16_t v2;
+	uint32_t vbatt;
 
 	LOG_DBG("Check for critically low batteries");
 	for (i = 0; i < NUM_PACKS; i++) {
-		if ((rc = max17205_read_voltage(packs[i].dev, MAX17205_CHAN_V_CELL_1, &packs[i].data.v_cell_1_mV)) != 0) {
-			packs[i].data.v_cell_1_mV = 0;
+		if ((rc = max17205_read_batt(packs[i].dev, &vbatt)) != 0 ) {
+			vbatt = 0;
 		}
-		if ((rc = max17205_read_voltage(packs[i].dev, MAX17205_CHAN_V_CELL_2, &packs[i].data.v_cell_2_mV)) != 0) {
-			packs[i].data.v_cell_2_mV = 0;
+		if ((rc = max17205_read_voltage(packs[i].dev, MAX17205_CHAN_V_CELL_1, &v1)) != 0) {
+			v1 = 0;
 		}
+		v2 = (uint16_t)vbatt - v1;
+		LOG_DBG("p:%u, vbatt:%u, v1:%u, v2:%u", i + 1, vbatt, v1, v2);
+		packs[i].data.batt_mV = vbatt;
+		packs[i].data.v_cell_1_mV = v1;
+		packs[i].data.v_cell_2_mV = v2;
 	}
 	return are_batteries_critically_low();
 }
