@@ -7,15 +7,15 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
 project(app_battery LANGUAGES C)
 
-execute_process(COMMAND bash -c "oresat-configs canopennode ${CMAKE_CURRENT_SOURCE_DIR}/od.yaml ${CMAKE_CURRENT_SOURCE_DIR}/../../common/od.yaml -d gen")
+#execute_process(COMMAND bash -c "oresat-configs canopennode ${CMAKE_CURRENT_SOURCE_DIR}/od.yaml ${CMAKE_CURRENT_SOURCE_DIR}/../../common/od.yaml -d gen"
 
 target_sources(app PRIVATE
   src/main.c
   src/batt.c
   src/calib.c
   src/hist.c
-  gen/OD.c
+  objdict/CO_OD.c
   drivers/sensor/maxim/max17205/max17205.c
 )
 
-zephyr_include_directories(gen)
+zephyr_include_directories(objdict)
