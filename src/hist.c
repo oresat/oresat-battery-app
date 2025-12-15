@@ -8,7 +8,7 @@
 #include <zephyr/device.h>
 #include <zephyr/console/console.h>
 #include <canopennode.h>
-#include <OD.h>
+#include <CO_OD.h>
 #include <oresat.h>
 
 #include "batt.h"

@@ -4,7 +4,7 @@
 #include <zephyr/console/console.h>
 #include <zephyr/drivers/gpio.h>
 #include <canopennode.h>
-#include <OD.h>
+#include <CO_OD.h>
 #include <oresat.h>
 #include <board_sensors.h>
 
@@ -29,8 +29,12 @@
 LOG_MODULE_DECLARE(app_battery, CONFIG_APP_BATTERY_LOG_LEVEL);
 
 // Some of the code and data below requires 2 packs of 2 cells. Any other configuration may require changes.
-STATIC_ASSERT(NUM_CELLS == 2);
-STATIC_ASSERT(NUM_PACKS == 2);
+#if (NUM_CELLS != 2)
+#error "NUM_CELLS is not 2!"
+#endif
+#if (NUM_PACKS != 2)
+#error "NUM_PACKS is not 2!"
+#endif
 
 #if 0
 #if DEBUG_PRINT
@@ -522,57 +526,57 @@ static void populate_od_pack_data(pack_t *pack)
 		state_bitmask |= (1 << STATUS_BIT_CHG_STAT);
 	}
 
-	CO_LOCK_OD(CO->CANmodule);
+	CO_LOCK_OD();
 	if (pack->pack_number == 1) {
-		OD_RAM.x4000_pack_1.status = state_bitmask;
-		OD_RAM.x4000_pack_1.vbatt = MIN(pack_data->batt_mV, UINT16_MAX);
-		OD_RAM.x4000_pack_1.vcell_max = pack_data->v_cell_max_volt_mV;
-		OD_RAM.x4000_pack_1.vcell_min = pack_data->v_cell_min_volt_mV;
-		OD_RAM.x4000_pack_1.vcell = pack_data->v_cell_mV;
-		OD_RAM.x4000_pack_1.vcell_1 = pack_data->v_cell_1_mV;
-		OD_RAM.x4000_pack_1.vcell_2 = pack_data->v_cell_2_mV;
-		OD_RAM.x4000_pack_1.vcell_avg = pack_data->v_cell_avg_mV;
-		OD_RAM.x4000_pack_1.current = CLAMP(pack_data->current_mA, INT16_MIN, INT16_MAX);
-		OD_RAM.x4000_pack_1.current_avg = CLAMP(pack_data->avg_current_mA, INT16_MIN, INT16_MAX);
-		OD_RAM.x4000_pack_1.current_max = CLAMP(pack_data->max_current_mA, INT16_MIN, INT16_MAX);
-		OD_RAM.x4000_pack_1.current_min = CLAMP(pack_data->min_current_mA, INT16_MIN, INT16_MAX);
-		OD_RAM.x4000_pack_1.full_capacity = MIN(pack_data->full_capacity_mAh, UINT16_MAX);
-		OD_RAM.x4000_pack_1.reported_capacity = MIN(pack_data->reported_capacity_mAh, UINT16_MAX);
-		OD_RAM.x4000_pack_1.time_to_empty = MIN(pack_data->time_to_empty_seconds, UINT16_MAX);
-		OD_RAM.x4000_pack_1.time_to_full = MIN(pack_data->time_to_full_seconds, UINT16_MAX);
-		OD_RAM.x4000_pack_1.cycles = pack_data->cycles;
-		OD_RAM.x4000_pack_1.reported_state_of_charge = pack_data->reported_state_of_charge;
-		OD_RAM.x4000_pack_1.temperature = CLAMP(pack_data->temp_1_C, INT8_MIN, INT8_MAX);
-		OD_RAM.x4000_pack_1.temperature_avg = CLAMP(pack_data->avg_temp_1_C, INT8_MIN, INT8_MAX);
-		OD_RAM.x4000_pack_1.temperature_max = pack_data->temp_max_C;
-		OD_RAM.x4000_pack_1.temperature_min = pack_data->temp_min_C;
+		CO_OD_RAM.pack_1.status = state_bitmask;
+		CO_OD_RAM.pack_1.vbatt = MIN(pack_data->batt_mV, UINT16_MAX);
+		CO_OD_RAM.pack_1.vcell_max = pack_data->v_cell_max_volt_mV;
+		CO_OD_RAM.pack_1.vcell_min = pack_data->v_cell_min_volt_mV;
+		CO_OD_RAM.pack_1.vcell = pack_data->v_cell_mV;
+		CO_OD_RAM.pack_1.vcell_1 = pack_data->v_cell_1_mV;
+		CO_OD_RAM.pack_1.vcell_2 = pack_data->v_cell_2_mV;
+		CO_OD_RAM.pack_1.vcell_avg = pack_data->v_cell_avg_mV;
+		CO_OD_RAM.pack_1.current = CLAMP(pack_data->current_mA, INT16_MIN, INT16_MAX);
+		CO_OD_RAM.pack_1.current_avg = CLAMP(pack_data->avg_current_mA, INT16_MIN, INT16_MAX);
+		CO_OD_RAM.pack_1.current_max = CLAMP(pack_data->max_current_mA, INT16_MIN, INT16_MAX);
+		CO_OD_RAM.pack_1.current_min = CLAMP(pack_data->min_current_mA, INT16_MIN, INT16_MAX);
+		CO_OD_RAM.pack_1.full_capacity = MIN(pack_data->full_capacity_mAh, UINT16_MAX);
+		CO_OD_RAM.pack_1.reported_capacity = MIN(pack_data->reported_capacity_mAh, UINT16_MAX);
+		CO_OD_RAM.pack_1.time_to_empty = MIN(pack_data->time_to_empty_seconds, UINT16_MAX);
+		CO_OD_RAM.pack_1.time_to_full = MIN(pack_data->time_to_full_seconds, UINT16_MAX);
+		CO_OD_RAM.pack_1.cycles = pack_data->cycles;
+		CO_OD_RAM.pack_1.reported_state_of_charge = pack_data->reported_state_of_charge;
+		CO_OD_RAM.pack_1.temperature = CLAMP(pack_data->temp_1_C, INT8_MIN, INT8_MAX);
+		CO_OD_RAM.pack_1.temperature_avg = CLAMP(pack_data->avg_temp_1_C, INT8_MIN, INT8_MAX);
+		CO_OD_RAM.pack_1.temperature_max = pack_data->temp_max_C;
+		CO_OD_RAM.pack_1.temperature_min = pack_data->temp_min_C;
 	} else if (pack->pack_number == 2) {
-		OD_RAM.x4001_pack_2.status = state_bitmask;
-		OD_RAM.x4001_pack_2.vbatt = MIN(pack_data->batt_mV, UINT16_MAX);
-		OD_RAM.x4001_pack_2.vcell_max = pack_data->v_cell_max_volt_mV;
-		OD_RAM.x4001_pack_2.vcell_min = pack_data->v_cell_min_volt_mV;
-		OD_RAM.x4001_pack_2.vcell = pack_data->v_cell_mV;
-		OD_RAM.x4001_pack_2.vcell_1 = pack_data->v_cell_1_mV;
-		OD_RAM.x4001_pack_2.vcell_2 = pack_data->v_cell_2_mV;
-		OD_RAM.x4001_pack_2.vcell_avg = pack_data->v_cell_avg_mV;
-		OD_RAM.x4001_pack_2.current = CLAMP(pack_data->current_mA, INT16_MIN, INT16_MAX);
-		OD_RAM.x4001_pack_2.current_avg = CLAMP(pack_data->avg_current_mA, INT16_MIN, INT16_MAX);
-		OD_RAM.x4001_pack_2.current_max = CLAMP(pack_data->max_current_mA, INT16_MIN, INT16_MAX);
-		OD_RAM.x4001_pack_2.current_min = CLAMP(pack_data->min_current_mA, INT16_MIN, INT16_MAX);
-		OD_RAM.x4001_pack_2.full_capacity = MIN(pack_data->full_capacity_mAh, UINT16_MAX);
-		OD_RAM.x4001_pack_2.reported_capacity = MIN(pack_data->reported_capacity_mAh, UINT16_MAX);
-		OD_RAM.x4001_pack_2.time_to_empty = MIN(pack_data->time_to_empty_seconds, UINT16_MAX);
-		OD_RAM.x4001_pack_2.time_to_full = MIN(pack_data->time_to_full_seconds, UINT16_MAX);
-		OD_RAM.x4001_pack_2.cycles = pack_data->cycles;
-		OD_RAM.x4001_pack_2.reported_state_of_charge = pack_data->reported_state_of_charge;
-		OD_RAM.x4001_pack_2.temperature = CLAMP(pack_data->temp_1_C, INT8_MIN, INT8_MAX);
-		OD_RAM.x4001_pack_2.temperature_avg = CLAMP(pack_data->avg_temp_1_C, INT8_MIN, INT8_MAX);
-		OD_RAM.x4001_pack_2.temperature_max = pack_data->temp_max_C;
-		OD_RAM.x4001_pack_2.temperature_min = pack_data->temp_min_C;
+		CO_OD_RAM.pack_2.status = state_bitmask;
+		CO_OD_RAM.pack_2.vbatt = MIN(pack_data->batt_mV, UINT16_MAX);
+		CO_OD_RAM.pack_2.vcell_max = pack_data->v_cell_max_volt_mV;
+		CO_OD_RAM.pack_2.vcell_min = pack_data->v_cell_min_volt_mV;
+		CO_OD_RAM.pack_2.vcell = pack_data->v_cell_mV;
+		CO_OD_RAM.pack_2.vcell_1 = pack_data->v_cell_1_mV;
+		CO_OD_RAM.pack_2.vcell_2 = pack_data->v_cell_2_mV;
+		CO_OD_RAM.pack_2.vcell_avg = pack_data->v_cell_avg_mV;
+		CO_OD_RAM.pack_2.current = CLAMP(pack_data->current_mA, INT16_MIN, INT16_MAX);
+		CO_OD_RAM.pack_2.current_avg = CLAMP(pack_data->avg_current_mA, INT16_MIN, INT16_MAX);
+		CO_OD_RAM.pack_2.current_max = CLAMP(pack_data->max_current_mA, INT16_MIN, INT16_MAX);
+		CO_OD_RAM.pack_2.current_min = CLAMP(pack_data->min_current_mA, INT16_MIN, INT16_MAX);
+		CO_OD_RAM.pack_2.full_capacity = MIN(pack_data->full_capacity_mAh, UINT16_MAX);
+		CO_OD_RAM.pack_2.reported_capacity = MIN(pack_data->reported_capacity_mAh, UINT16_MAX);
+		CO_OD_RAM.pack_2.time_to_empty = MIN(pack_data->time_to_empty_seconds, UINT16_MAX);
+		CO_OD_RAM.pack_2.time_to_full = MIN(pack_data->time_to_full_seconds, UINT16_MAX);
+		CO_OD_RAM.pack_2.cycles = pack_data->cycles;
+		CO_OD_RAM.pack_2.reported_state_of_charge = pack_data->reported_state_of_charge;
+		CO_OD_RAM.pack_2.temperature = CLAMP(pack_data->temp_1_C, INT8_MIN, INT8_MAX);
+		CO_OD_RAM.pack_2.temperature_avg = CLAMP(pack_data->avg_temp_1_C, INT8_MIN, INT8_MAX);
+		CO_OD_RAM.pack_2.temperature_max = pack_data->temp_max_C;
+		CO_OD_RAM.pack_2.temperature_min = pack_data->temp_min_C;
 	} else {
 		LOG_DBG("ERROR: pack number not expected: %d", pack->pack_number);
 	}
-	CO_UNLOCK_OD(CO->CANmodule);
+	CO_UNLOCK_OD();
 }
 
 static bool are_batteries_critically_low(void)
@@ -724,12 +728,8 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
 			LOG_INF("Populating %s Data", packs[i].name);
 
 			if (populate_pack_data(packs[i].dev, &packs[i].data) ) {
-				if (canopennode_is_running()) {
-					board_sensors_fill_od();
-					populate_od_pack_data(&packs[i]);
-				} else {
-					LOG_WRN("CANopenNode is not running!");
-				}
+				board_sensors_fill_od();
+				populate_od_pack_data(&packs[i]);
 			} else {
 				LOG_WRN("Data not valid!");
 			}
