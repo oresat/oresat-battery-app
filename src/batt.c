@@ -12,19 +12,12 @@
 #include "calib.h"
 #include "hist.h"
 
-//#include "max17205.h"
-//#include "CANopen.h"
-//#include "chtime.h"
-//#include "oresat_f0.h"
-//#include "flash_f0.h"
-//#include "crc.h"
 #include <sys/param.h>
 #include <string.h>
 
 // TODO:
 // - re-review writes to N-version of registers vs. non-N
 // - do we need to still deal with PACKCFG here? done in the driver now <-- remove once tested to confirm driver is working
-// - TEST CAN INTERFACE
 
 LOG_MODULE_DECLARE(app_battery, CONFIG_APP_BATTERY_LOG_LEVEL);
 
@@ -34,43 +27,6 @@ LOG_MODULE_DECLARE(app_battery, CONFIG_APP_BATTERY_LOG_LEVEL);
 #endif
 #if (NUM_PACKS != 2)
 #error "NUM_PACKS is not 2!"
-#endif
-
-#if 0
-#if DEBUG_PRINT
-#pragma message("Debug messages enabled")
-#else
-#pragma message("Debug messages disabled")
-#endif
-
-#if VERBOSE_DEBUG
-#pragma message("Verbose debug messages enabled")
-#else
-#pragma message("Verbose debug messages disabled")
-#endif
-
-// If batt_nv_programing_cfg registers do not match current, rewrite the RAM shadow then prompt to write to NV.
-#if CONFIG_ENABLE_NV_MEMORY_UPDATE_CODE
-#pragma message("NV memory update code enabled")
-#else
-#pragma message("NV memory update code disabled")
-#endif
-
-// If state of charge is known to be full, set LS bits D6-D0 of LearnCfg register to 0b111
-// and write MixCap and RepCap registers to 2600.
-#if CONFIG_ENABLE_LEARN_COMPLETE
-#pragma message("Enable learn complete enabled")
-#else
-#pragma message("Enable learn complete disabled")
-#endif
-
-// Recommend setting ENABLE_HEADERS to 0 for battery board v2.1. Otherwise, brownouts can occur, causing
-// the C3 to reboot the battery board.
-#if CONFIG_ENABLE_HEATERS
-#pragma message("Heaters enabled")
-#else
-#pragma message("Heaters disabled")
-#endif
 #endif
 
 #define NV_WRITE_PROMPT_TIMEOUT_S 15
@@ -316,7 +272,7 @@ static void run_battery_heating_state_machine(void)
  * @brief Query the MAX17 chip for a given pack and populate *pk_data with the current status/state represented in the MAX17
  *
  * @param[in] *pack Destination into which to store MAX17205
- *  	 pack data.
+ *	 pack data.
  */
 static void update_battery_charging_state(const pack_t *pack)
 {
@@ -357,9 +313,9 @@ static void update_battery_charging_state(const pack_t *pack)
 
 /**
  * @param dev[in] The MAX17205 driver object to use to query
- *  		 pack data from
+ *		 pack data from
  * @param *dest[out] Destination into which to store pack data
- *  	  currently tracked in the MAX17205
+ *	  currently tracked in the MAX17205
  *
  * @return true on success, false otherwise
  */
@@ -490,7 +446,7 @@ static bool populate_pack_data(const struct device *dev, batt_pack_data_t *dest)
 	LOG_DBG("Time (seconds):  to_empty =%u, to_full = %u",
 			  dest->time_to_empty_seconds, dest->time_to_full_seconds);
 
-	LOG_DBG("SOC (%%):  	   reported = %u%%",
+	LOG_DBG("SOC (%%):        reported = %u%%",
 			  dest->reported_state_of_charge);
 
 	LOG_DBG("cycles = %u", dest->cycles);
@@ -764,7 +720,7 @@ void batt_close(void)
 	LOG_ERR("Terminating battery thread...");
 
 	for (int i = 0; i < NUM_PACKS; i++) {
-		// TODO: is there a way to stop a driver?
+		// Is there a way to stop a driver? Not currently.
 		// max17205Stop(packs[i].drv);
 	}
 

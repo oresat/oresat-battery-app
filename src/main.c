@@ -10,6 +10,7 @@
 #include <oresat.h>
 
 #include "batt.h"
+#include "diag.h"
 
 LOG_MODULE_REGISTER(app_battery, CONFIG_APP_BATTERY_LOG_LEVEL);
 
@@ -64,9 +65,6 @@ void can_thread_handler(void *p1, void *p2, void *p3)
 		timeout = 1000U;
 		timestamp = k_uptime_get();
 
-		/* Process Sync */
-		//syncWas = CO_process_SYNC(CO, timeout);
-
 		/* Read inputs */
 		CO_process_RPDO(CO, syncWas);
 
@@ -112,7 +110,9 @@ int main(void)
 	k_thread_stack_free(batt_stack);
 	k_thread_stack_free(can_stack);
 
+#if defined(CONFIG_REBOOT)
 	sys_reboot(SYS_REBOOT_COLD);
+#endif
 	LOG_INF("Done.");
 
 	return 0;

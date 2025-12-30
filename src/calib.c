@@ -6,6 +6,10 @@
 #include "batt.h"
 #include "calib.h"
 
+// TODO:
+// - Zephyr console does not have a read timeout; switch to shell
+//   instead of using console_getchar()
+
 LOG_MODULE_REGISTER(calib, CONFIG_APP_BATTERY_LOG_LEVEL);
 
 /*
@@ -38,8 +42,8 @@ static const max17205_regval_t batt_nv_programing_cfg[] = {
 	{MAX17205_AD_NICHGTERM,    0x014D }, // Wizard: 52.0 mA
 	{MAX17205_AD_NVEMPTY,      0x965A }, // Wizard: VEmpty = 0x12C * 10mV = 3.0v; VRecovery = 0x5A * 40mV = 3.6v
 	{MAX17205_AD_NTCURVE,      0x0064 }, // Wizard / datasheet recommendation for Fenwal thermistor
-	{MAX17205_AD_NTGAIN,	   0xF49A }, // ditto
-	{MAX17205_AD_NTOFF, 	   0x16A1 }, // ditto
+	{MAX17205_AD_NTGAIN,       0xF49A }, // ditto
+	{MAX17205_AD_NTOFF,        0x16A1 }, // ditto
 	{MAX17205_AD_NDESIGNCAP,   0x1450 }, // Wizard: 2600 mAh (x2 conversion factor)
 	{MAX17205_AD_NFULLCAPREP,  0x1450 }, // ditto
 	{MAX17205_AD_NFULLCAPNOM,  0x1A22 }, // Wizard: 0x1794; full learning cycle found 0x1A22 on average
@@ -214,11 +218,11 @@ static int max17205_validate_registers(const struct device *dev, const max17205_
 			return rc;
 		}
 		if (buf != list[i].value) {
-			LOG_WRN("   %-30s register 0x%04X is 0x%04X 	NOT the expected  0x%04X",
+			LOG_WRN("   %-30s register 0x%04X is 0x%04X		NOT the expected  0x%04X",
 				max17205_reg_to_str(list[i].reg), list[i].reg, buf, list[i].value);
 			matches = false;
 		} else {
-			LOG_DBG("   %-30s register 0x%04X is 0x%04X 	CORRECT",
+			LOG_DBG("   %-30s register 0x%04X is 0x%04X		CORRECT",
 				max17205_reg_to_str(list[i].reg), list[i].reg, buf);
 		}
 	}
@@ -580,7 +584,7 @@ static bool prompt_nv_write(const struct device *dev, const char *pack_str)
 	if (num_writes_left > 0) {
 		// Answer n to just use the changes in the volatile registers
 		LOG_DBG("Write NV memory on MAX17205 for %s ? y/n? ", pack_str);
-		uint8_t ch = console_getchar(); // TODO: Zephyr console does not have a read timeout; switch to shell
+		uint8_t ch = console_getchar();
 
 		LOG_DBG("");
 
