@@ -2,6 +2,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/console/console.h>
 
 #include "batt.h"
 #include "calib.h"
@@ -11,6 +12,20 @@
 //   instead of using console_getchar()
 
 LOG_MODULE_REGISTER(calib, CONFIG_APP_BATTERY_LOG_LEVEL);
+
+// DEBUG_PRINT is required for ENABLE_NV_MEMORY_UPDATE_CODE to do anything
+#if DEBUG_PRINT && CONFIG_ENABLE_NV_MEMORY_UPDATE_CODE
+#define NV_WRITE_PROMPT_ENABLED 1
+#else
+#define NV_WRITE_PROMPT_ENABLED 0
+#endif
+
+// DEBUG_PRINT is required for ENABLE_LEARN_COMPLETE to do anything
+#if DEBUG_PRINT && CONFIG_ENABLE_LEARN_COMPLETE
+#define LEARN_COMPLETE_ENABLED 1
+#else
+#define LEARN_COMPLETE_ENABLED 0
+#endif
 
 /*
   The values for batt_nv_programing_cfg are detailed in the google document "MAX17205 Register Values"
@@ -615,6 +630,7 @@ static bool prompt_nv_write(const struct device *dev, const char *pack_str)
 static bool update_learning_complete(const struct device *dev, pack_t *pack)
 {
 	batt_pack_data_t *pack_data = &pack->data;
+	uint16_t state;
 	bool ret = false;
 
 	if ((pack_data->batt_mV > BATT_FULL_THRESHOLD_MV) &&
@@ -623,14 +639,14 @@ static bool update_learning_complete(const struct device *dev, pack_t *pack)
 		(pack_data->full_capacity_mAh >= CELL_CAPACITY_MAH) ) {
 
 		LOG_DBG("Pack %d seems full", pack->pack_number);
-		uint16_t state;
-		int rc = max17205_read_learn_stage(dev, &state);
 
+		int rc = max17205_read_learn_stage(dev, &state);
 		if (rc) {
 			LOG_DBG("Error reading learn state");
 			return ret;
 		}
 		LOG_DBG("Learning state = %u", state);
+
 		if (state == MAX17205_LEARN_COMPLETE) {
 			LOG_DBG("Learning is already complete.");
 		} else {
@@ -651,17 +667,26 @@ static bool update_learning_complete(const struct device *dev, pack_t *pack)
 			LOG_DBG("Learning state set = %u", state);
 			ret = true;
 		}
+
 		pack_data->mix_capacity_mAh = pack_data->reported_capacity_mAh = pack_data->full_capacity_mAh;
-		if ( (rc = max17205_write_capacity(dev, MAX17205_CHAN_MIX_CAPACITY, pack_data->mix_capacity_mAh)) != MSG_OK ) {
+
+		rc = max17205_write_capacity(dev, MAX17205_CHAN_MIX_CAPACITY,
+									 pack_data->mix_capacity_mAh);
+		if (rc != 0) {
 			LOG_DBG("Failed to write MIXCAP");
-		} else if ( (rc = max17205_write_capacity(dev, SENSOR_CHAN_GAUGE_NOM_AVAIL_CAPACITY, pack_data->reported_capacity_mAh)) != MSG_OK ) {
-			LOG_DBG("Failed to write REPCAP");
-		} else {
-			LOG_DBG("Mixcap and repcap set to %u", pack_data->full_capacity_mAh);
+			return false;
 		}
-		return ret;
+
+		rc = max17205_write_capacity(dev, SENSOR_CHAN_GAUGE_NOM_AVAIL_CAPACITY,
+									 pack_data->reported_capacity_mAh);
+		if (rc != 0) {
+			LOG_DBG("Failed to write REPCAP");
+			return false;
+		}
+
+		LOG_DBG("Mixcap and repcap set to %u", pack_data->full_capacity_mAh);
 	}
-	return false;
+	return ret;
 }
 #endif // LEARN_COMPLETE_ENABLED
 
