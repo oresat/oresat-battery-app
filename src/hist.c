@@ -13,7 +13,7 @@
 
 #include "batt.h"
 #include "hist.h"
-#include "calib.h"
+#include "max17205_intf.h"
 
 // TODO:
 // - test history wrap-around

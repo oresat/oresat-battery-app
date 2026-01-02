@@ -14,6 +14,7 @@ target_sources(app PRIVATE
   src/batt.c
   src/calib.c
   src/hist.c
+  src/max17205_intf.c
   objdict/CO_OD.c
   drivers/sensor/maxim/max17205/max17205.c
 )

@@ -9,6 +9,7 @@
 #include <board_sensors.h>
 
 #include "batt.h"
+#include "max17205_intf.h"
 #include "calib.h"
 #include "hist.h"
 
@@ -701,6 +702,7 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
 			} else {
 				LOG_WRN("Data not valid!");
 			}
+			update_battery_charging_state(&packs[i]);
 		}
 
 #if CONFIG_ENABLE_HEATERS
@@ -708,10 +710,6 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
 			run_battery_heating_state_machine();
 		}
 #endif
-
-		for (i = 0; i < NUM_PACKS; i++) {
-			update_battery_charging_state(&packs[i]);
-		}
 	}
 }
 
