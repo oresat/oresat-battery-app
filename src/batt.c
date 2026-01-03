@@ -10,7 +10,6 @@
 
 #include "batt.h"
 #include "max17205_intf.h"
-#include "calib.h"
 #include "hist.h"
 
 #include <sys/param.h>
@@ -21,6 +20,12 @@
 // - do we need to still deal with PACKCFG here? done in the driver now <-- remove once tested to confirm driver is working
 
 LOG_MODULE_DECLARE(app_battery, CONFIG_APP_BATTERY_LOG_LEVEL);
+
+#define BATT_THREAD_STACK_SIZE 2048
+#define BATT_THREAD_PRIORITY 0
+extern const k_tid_t batt_id;
+
+K_EVENT_DEFINE(batt_event);
 
 // Some of the code and data below requires 2 packs of 2 cells. Any other configuration may require changes.
 #if (NUM_CELLS != 2)
@@ -36,7 +41,6 @@ LOG_MODULE_DECLARE(app_battery, CONFIG_APP_BATTERY_LOG_LEVEL);
 #define SHUTDOWN_MV 2850
 
 // Subtask periods
-#define CALIB_INTERVAL_MS 120000 // 2 minutes
 #define RUNTIME_BATT_STORE_INTERVAL_MS 300000U // 5 minutes
 #define LED_TOGGLE_INTERVAL_MS 500 // 0.5 seconds
 #define DATA_INTERVAL_MS 4000 // 4 seconds
@@ -581,13 +585,15 @@ static bool check_for_critically_low_batteries(void)
 }
 
 /* Battery monitoring thread */
-void batt_thread_handler(void *p1, void *p2, void *p3)
+static void handle_batt(void *p1, void *p2, void *p3)
 {
 	(void)p1;
 	(void)p2;
 	(void)p3;
 	unsigned int i;
 	int rc;
+
+	k_thread_name_set(batt_id, "battery_thread");
 
 	LOG_INF("Starting battery thread");
 
@@ -599,36 +605,30 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
 
 	if (!device_is_ready(led.port)) {
 		LOG_ERR("LED is not ready.");
-		k_msleep(1000);
-		return;
+		goto fatal_exit;
 	}
 	rc = gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
 	if (rc) {
 		LOG_ERR("Error configuring LED output: %d", rc);
-		k_msleep(1000);
-		return;
+		goto fatal_exit;
 	}
 
 	if (!device_is_ready(packs[0].dev)) {
 		LOG_ERR("sensor: device pack1 not ready.");
-		k_msleep(1000);
-		return;
+		goto fatal_exit;
 	}
 	if (!device_is_ready(packs[1].dev)) {
 		LOG_ERR("sensor: device pack2 not ready.");
-		k_msleep(1000);
-		return;
+		goto fatal_exit;
 	}
 
 	if ((rc = batt_hist_init()) != 0) {
-		k_msleep(1000);
-		return;
+		goto fatal_exit;
 	}
 
 	if ((rc = heaters_init()) != 0) {
 		LOG_ERR("Error initializing heaters: %d", rc);
-		k_msleep(1000);
-		return;
+		goto fatal_exit;
 	}
 	heaters_on(false);
 
@@ -660,17 +660,11 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
 	int64_t now = k_uptime_get();
 	int64_t next_hist_update_ms = RUNTIME_BATT_STORE_INTERVAL_MS + now;
 	int64_t next_led_update_ms = LED_TOGGLE_INTERVAL_MS + now;
-	int64_t next_calib_update_ms = CALIB_INTERVAL_MS + now;
 	int64_t next_data_update_ms = DATA_INTERVAL_MS + now;
 
 	LOG_INF("Entering main battery loop");
 	for (;;) {
 		ms = k_uptime_get();
-
-		if (ms >= next_calib_update_ms) {
-			next_calib_update_ms = ms + CALIB_INTERVAL_MS;
-			manage_calibration();
-		}
 
 		if (ms >= next_hist_update_ms) {
 			next_hist_update_ms = ms + RUNTIME_BATT_STORE_INTERVAL_MS;
@@ -705,12 +699,24 @@ void batt_thread_handler(void *p1, void *p2, void *p3)
 			update_battery_charging_state(&packs[i]);
 		}
 
+		/* Notify any other waiting threads the data is ready */
+		k_event_post(&batt_event, BATT_EVENT_UPDATED);
+
 #if CONFIG_ENABLE_HEATERS
 		if (!are_batteries_critically_low()) {
 			run_battery_heating_state_machine();
 		}
 #endif
 	}
+
+fatal_exit:
+	k_msleep(1000);
+	__ASSERT(false, "Fatal error");
+}
+
+uint32_t batt_event_wait(bool reset, k_timeout_t timeout)
+{
+	return k_event_wait(&batt_event, BATT_EVENT_UPDATED, reset, timeout);
 }
 
 void batt_close(void)
@@ -726,3 +732,5 @@ void batt_close(void)
 
 	gpio_pin_set_dt(&led, GPIO_OUTPUT_INACTIVE);
 }
+
+K_THREAD_DEFINE(batt_id, BATT_THREAD_STACK_SIZE, handle_batt, NULL, NULL, NULL, BATT_THREAD_PRIORITY, 0, 0);

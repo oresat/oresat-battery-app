@@ -12,6 +12,7 @@ project(app_battery LANGUAGES C)
 target_sources(app PRIVATE
   src/main.c
   src/batt.c
+  src/can.c
   src/calib.c
   src/hist.c
   src/max17205_intf.c

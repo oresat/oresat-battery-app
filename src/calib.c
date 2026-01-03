@@ -1,8 +1,10 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/logging/log_ctrl.h>
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/console/console.h>
+#include <zephyr/fatal.h>
 
 #include "batt.h"
 #include "calib.h"
@@ -27,6 +29,12 @@ LOG_MODULE_REGISTER(calib, CONFIG_APP_BATTERY_LOG_LEVEL);
 #else
 #define LEARN_COMPLETE_ENABLED 0
 #endif
+
+#define CALIB_THREAD_STACK_SIZE 2048
+#define CALIB_THREAD_PRIORITY 0
+extern const k_tid_t calib_id;
+
+#define CALIB_INTERVAL_MS 120000 // 2 minutes
 
 /**
  * Helper function to trigger write of volatile memory on MAX71205 chip.
@@ -136,7 +144,7 @@ static bool update_learning_complete(const struct device *dev, pack_t *pack)
 }
 #endif // LEARN_COMPLETE_ENABLED
 
-void manage_calibration(void)
+static void handle_calib(void *p1, void *p2, void *p3)
 {
 #if DEBUG_PRINT
 	unsigned int i;
@@ -145,33 +153,43 @@ void manage_calibration(void)
 #endif
 	pack_t *pack;
 
-	for (i = 0; i < NUM_PACKS; i++) {
-		pack = get_pack(i);
-		LOG_DBG("%s:", pack->name);
-		max17205_print_volatile_memory(pack->dev);
+	k_thread_name_set(calib_id, "calib_thread");
 
-#if LEARN_COMPLETE_ENABLED
-		// If LEARN_COMPLETE_ENABLED=1 and NV_WRITE_PROMPT_ENABLED=1 are both enabled, we will only prompt to update
-		// NV when learning is complete. If LEARN_COMPLETE_ENABLED is not 1 but the others are, then we will only prompt to update
-		// NV if there is a change to NV RAM required (done prior to the main loop).
-		pack->updated = update_learning_complete(pack->dev, pack);
-#endif // LEARN_COMPLETE_ENABLED
-#if NV_WRITE_PROMPT_ENABLED
-		if (pack->init && pack->updated) {
-			nv_written |= prompt_nv_write(pack->dev, pack->name);
-			pack->updated = false;
-		}
-#endif // NV_WRITE_PROMPT_ENABLED
-	}
+	while (true) {
+		/* Update calibration roughly this often, synchronized to battery event */
+		k_msleep(CALIB_INTERVAL_MS);
+		(void)batt_event_wait(true, K_FOREVER);
 
-#if NV_WRITE_PROMPT_ENABLED
-	if (nv_written) {
-		LOG_DBG("Done with NV RAM update code, set CONFIG_ENABLE_NV_MEMORY_UPDATE_CODE=0 and re-write firmware.");
-		for (;;) {
-			LOG_DBG(".");
-			k_msleep(1000);
+		for (i = 0; i < NUM_PACKS; i++) {
+			pack = get_pack(i);
+			LOG_DBG("%s:", pack->name);
+			max17205_print_volatile_memory(pack->dev);
+
+	#if LEARN_COMPLETE_ENABLED
+			// If LEARN_COMPLETE_ENABLED=1 and NV_WRITE_PROMPT_ENABLED=1 are both enabled, we will only prompt to update
+			// NV when learning is complete. If LEARN_COMPLETE_ENABLED is not 1 but the others are, then we will only prompt to update
+			// NV if there is a change to NV RAM required (done prior to the main loop).
+			pack->updated = update_learning_complete(pack->dev, pack);
+	#endif // LEARN_COMPLETE_ENABLED
+	#if NV_WRITE_PROMPT_ENABLED
+			if (pack->init && pack->updated) {
+				nv_written |= prompt_nv_write(pack->dev, pack->name);
+				pack->updated = false;
+			}
+	#endif // NV_WRITE_PROMPT_ENABLED
 		}
+
+	#if NV_WRITE_PROMPT_ENABLED
+		if (nv_written) {
+			LOG_DBG("Done with NV RAM update code, set CONFIG_ENABLE_NV_MEMORY_UPDATE_CODE=0 and re-write firmware.");
+			LOG_ERR("Halting system");
+			LOG_PANIC(); // attempt to flush the logs
+			k_fatal_halt(100);
+			CODE_UNREACHABLE;
+		}
+	#endif // NV_WRITE_PROMPT_ENABLED
 	}
-#endif // NV_WRITE_PROMPT_ENABLED
 #endif // DEBUG_PRINT
 }
+
+K_THREAD_DEFINE(calib_id, CALIB_THREAD_STACK_SIZE, handle_calib, NULL, NULL, NULL, CALIB_THREAD_PRIORITY, 0, 0);

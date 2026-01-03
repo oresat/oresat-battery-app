@@ -5,8 +5,6 @@
 extern "C" {
 #endif
 
-void manage_calibration(void);
-
 #ifdef __cplusplus
 }
 #endif

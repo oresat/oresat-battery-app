@@ -90,9 +90,31 @@ typedef struct pack {
 
 #define ARRAY_LEN(x) (sizeof(x)/sizeof(x[0]))
 
+#define BATT_EVENT_UPDATED 0x0001
+
+/**
+ * Get access to pack_t structure for specified pack number.
+ * 
+ * @param pack - the pack number to retrieve.
+ * 
+ * @return pack_t* - pointer to pack structure if pack is in the
+ *  	   range of 0 to (NUM_PACKS - 1), otherwise NULL.
+ */
 extern pack_t *get_pack(unsigned int pack);
 
-/* Battery monitoring thread prototypes */
-extern void batt_thread_handler(void *p1, void *p2, void *p3);
+/**
+ * Wait for battery data updated event. This can be used by
+ * one or more threads; all that are waiting will be woken at
+ * the same time, when BATT_EVENT_UPDATED is posted.
+ * 
+ * @param reset   - bool set true to clear already-pending
+ *  			  event, otherwise leave as-is.
+ * @param timeout - timeout; use K_NO_WAIT or K_FOREVER else
+ *  			  a K_MSEC() or other macro for specific time
+ *  			  duration.
+ * #return uint32_t - 0 if timed-out, else event value that
+ * 				  occurred.
+ */
+extern uint32_t batt_event_wait(bool reset, k_timeout_t timeout);
 
 #endif
