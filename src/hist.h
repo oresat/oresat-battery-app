@@ -5,9 +5,11 @@
 extern "C" {
 #endif
 
-int batt_hist_init(void);
-void batt_hist_load_latest(pack_t *pack);
-bool batt_hist_store_current(void);
+#include "batt.h"
+
+int hist_init(void);
+bool hist_load_current(uint8_t hist_data[HIST_DATA_SIZE]);
+bool hist_store_current(const uint8_t hist_data[HIST_DATA_SIZE]);
 
 #ifdef __cplusplus
 }

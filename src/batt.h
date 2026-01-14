@@ -88,15 +88,19 @@ typedef struct pack {
 #define NUM_CELLS 2 /* Number of cells per pack */
 #define NUM_PACKS 2 /* Number of packs */
 
+// number of bytes of data to store in history;
+// must match size of private pack_hist_data_t in batt.c
+#define HIST_DATA_SIZE (4 * NUM_PACKS)
+
 #define ARRAY_LEN(x) (sizeof(x)/sizeof(x[0]))
 
 #define BATT_EVENT_UPDATED 0x0001
 
 /**
  * Get access to pack_t structure for specified pack number.
- * 
+ *
  * @param pack - the pack number to retrieve.
- * 
+ *
  * @return pack_t* - pointer to pack structure if pack is in the
  *  	   range of 0 to (NUM_PACKS - 1), otherwise NULL.
  */
@@ -106,7 +110,7 @@ extern pack_t *get_pack(unsigned int pack);
  * Wait for battery data updated event. This can be used by
  * one or more threads; all that are waiting will be woken at
  * the same time, when BATT_EVENT_UPDATED is posted.
- * 
+ *
  * @param reset   - bool set true to clear already-pending
  *  			  event, otherwise leave as-is.
  * @param timeout - timeout; use K_NO_WAIT or K_FOREVER else

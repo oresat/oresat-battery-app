@@ -1,4 +1,5 @@
 #include <zephyr/kernel.h>
+#include <zephyr/sys/__assert.h>
 #include <zephyr/device.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/console/console.h>
@@ -41,7 +42,7 @@ K_EVENT_DEFINE(batt_event);
 #define SHUTDOWN_MV 2850
 
 // Subtask periods
-#define RUNTIME_BATT_STORE_INTERVAL_MS 300000U // 5 minutes
+#define PACK_HIST_STORE_INTERVAL_MS 300000U // 5 minutes
 #define LED_TOGGLE_INTERVAL_MS 500 // 0.5 seconds
 #define DATA_INTERVAL_MS 4000 // 4 seconds
 #define BATT_TASK_SLEEP_INTERVAL_MS 10
@@ -100,6 +101,16 @@ static pack_t packs[NUM_PACKS] = {
 	 .name = "Pack 2"
 	}
 };
+
+// raw register values to store at runtime per pack;
+// restoring after a reset should result in accurate
+// fuel gauge estimates
+typedef struct __attribute__((packed)) runtime_pack_data {
+	uint16_t mixcap;			// MAX17205_AD_MIXCAP
+	uint16_t repcap;			// MAX17205_AD_REPCAP
+} pack_hist_data_t;
+
+static pack_hist_data_t hist_data[NUM_PACKS];
 
 #if 0
 #define GPIO_NODE DT_NODELABEL(gpiob)
@@ -584,6 +595,61 @@ static bool check_for_critically_low_batteries(void)
 	return are_batteries_critically_low();
 }
 
+static void populate_pack_hist_data(const struct device *dev, pack_hist_data_t *data)
+{
+	uint16_t tmp;
+	int rc;
+
+	rc = max17205_reg_read(dev, MAX17205_AD_MIXCAP, &tmp);
+	if (rc) {
+		data->mixcap = 0;
+		LOG_DBG("Unable to read AD_MIXCAP");
+	} else {
+		// clamp to design limit to handle case where full pack is in storage,
+		// self discharges, then is charged later -- MAX17205 will then make max cap
+		// higher than it should be
+		data->mixcap = MIN(tmp, CELL_CAPACITY_MAH_RAW);
+		LOG_DBG("Read 0x%04X from AD_MIXCAP", tmp);
+	}
+	rc = max17205_reg_read(dev, MAX17205_AD_REPCAP, &tmp);
+	if (rc) {
+		data->repcap = 0;
+		LOG_DBG("Unable to read AD_REPCAP");
+	} else {
+		data->repcap = MIN(tmp, CELL_CAPACITY_MAH_RAW);
+		LOG_DBG("Read 0x%04X from AD_REPCAP", tmp);
+	}
+}
+
+static void utilize_pack_hist_data(const struct device *dev, const pack_hist_data_t *data)
+{
+	uint16_t tmp;
+	int rc;
+
+	tmp = MIN(data->mixcap, CELL_CAPACITY_MAH_RAW);
+	if (tmp) {
+		rc = max17205_reg_write(dev, MAX17205_AD_MIXCAP, tmp);
+		if (rc) {
+			LOG_DBG("Error writing AD_MIXCAP");
+		} else {
+			LOG_DBG("Wrote 0x%04X to AD_MIXCAP", tmp);
+		}
+	} else {
+		LOG_DBG("Leaving AD_MIXCAP at default");
+	}
+	tmp = MIN(data->repcap, CELL_CAPACITY_MAH_RAW);
+	if (tmp) {
+		rc = max17205_reg_write(dev, MAX17205_AD_REPCAP, tmp);
+		if (rc) {
+			LOG_DBG("Error writing AD_REPCAP");
+		} else {
+			LOG_DBG("Wrote 0x%04X to AD_REPCAP", tmp);
+		}
+	} else {
+		LOG_DBG("Leaving AD_REPCAP at default");
+	}
+}
+
 /* Battery monitoring thread */
 static void handle_batt(void *p1, void *p2, void *p3)
 {
@@ -594,8 +660,10 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	int rc;
 
 	k_thread_name_set(batt_id, "battery_thread");
-
 	LOG_INF("Starting battery thread");
+
+	// Ensure value in batt.h matches size of array above
+	__ASSERT((sizeof(pack_hist_data_t) * NUM_PACKS) == HIST_DATA_SIZE, "sizeof(hist_data) must match HIST_DATA_SIZE");
 
 	packs[0].dev = DEVICE_DT_GET(DT_NODELABEL(pack1));
 	packs[1].dev = DEVICE_DT_GET(DT_NODELABEL(pack2));
@@ -622,7 +690,7 @@ static void handle_batt(void *p1, void *p2, void *p3)
 		goto fatal_exit;
 	}
 
-	if ((rc = batt_hist_init()) != 0) {
+	if ((rc = hist_init()) != 0) {
 		goto fatal_exit;
 	}
 
@@ -651,14 +719,19 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	// Let MAX17205s startup and run for a bit. Overwriting the MIXCAP and REPCAP values
 	// too quickly leads to bad measurements otherwise.
 	k_msleep(500);
-	for (i = 0; i < NUM_PACKS; i++) {
-		batt_hist_load_latest(&packs[i]);
+
+	// Retrieve and use most recently stored hist data from flash
+	if (hist_load_current((uint8_t *)hist_data)) {
+		for (i = 0; i < NUM_PACKS; i++) {
+			LOG_DBG("Loading entry to pack %u:", i);
+			utilize_pack_hist_data(packs[i].dev, &hist_data[i]);
+		}
 	}
 
 	uint32_t loop = 0;
 	int64_t ms = 0;
 	int64_t now = k_uptime_get();
-	int64_t next_hist_update_ms = RUNTIME_BATT_STORE_INTERVAL_MS + now;
+	int64_t next_hist_update_ms = PACK_HIST_STORE_INTERVAL_MS + now;
 	int64_t next_led_update_ms = LED_TOGGLE_INTERVAL_MS + now;
 	int64_t next_data_update_ms = DATA_INTERVAL_MS + now;
 
@@ -667,8 +740,12 @@ static void handle_batt(void *p1, void *p2, void *p3)
 		ms = k_uptime_get();
 
 		if (ms >= next_hist_update_ms) {
-			next_hist_update_ms = ms + RUNTIME_BATT_STORE_INTERVAL_MS;
-			batt_hist_store_current();
+			next_hist_update_ms = ms + PACK_HIST_STORE_INTERVAL_MS;
+
+			for (i = 0; i < NUM_PACKS; i++) {
+				populate_pack_hist_data(packs[i].dev, &hist_data[i]);
+			}
+			hist_store_current((const uint8_t *)hist_data);
 		}
 
 		if (ms >= next_led_update_ms) {
