@@ -164,7 +164,7 @@ int max17205_write_capacity(const struct device *dev, enum sensor_channel chan, 
 {
 	struct sensor_value sensor_val = {.val1 = cap, .val2 = 0};
 
-	return sensor_attr_set(dev, 0, MAX17205_ATTR_CAPACITY, &sensor_val);
+	return sensor_attr_set(dev, chan, MAX17205_ATTR_CAPACITY, &sensor_val);
 }
 #endif
 
@@ -174,7 +174,7 @@ int max17205_read_capacity(const struct device *dev, enum sensor_channel chan, u
 {
 	struct sensor_value sensor_val;
 
-	return sensor_attr_get(dev, 0, MAX17205_ATTR_CAPACITY, &sensor_val);
+	return sensor_attr_get(dev, chan, MAX17205_ATTR_CAPACITY, &sensor_val);
 }
 #endif
 
