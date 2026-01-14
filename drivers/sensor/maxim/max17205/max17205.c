@@ -623,6 +623,7 @@ static int max17205_channel_get(const struct device *dev, enum sensor_channel ch
 	case MAX17205_CHAN_LEARN_STAGE:
 		raw = data->learn_stage;
 		convert_learn_state(raw, valp);
+		break;
 	default:
 		LOG_ERR("Unsupported channel %d!", chan);
 		return -ENOTSUP;
@@ -771,6 +772,7 @@ static int max17205_sample_fetch(const struct device *dev, enum sensor_channel c
 	case MAX17205_CHAN_LEARN_STAGE:
 		reg_addr = MAX17205_AD_LEARNCFG;
 		dest = &data->learn_stage;
+		break;
 	default:
 		LOG_ERR("Unknown channel: %d", chan);
 		return -ENOTSUP;
@@ -844,6 +846,7 @@ static int max17205_attr_set(const struct device *dev,
 				break;
 			default:
 				rc = -EINVAL;
+				LOG_ERR("Unknown channel %d for MAX17205_ATTR_CAPACITY", (int)chan);
 			}
 			if (!rc) {
 				rc = max17205_reg_write(dev, reg_addr, raw);
@@ -862,10 +865,12 @@ static int max17205_attr_set(const struct device *dev,
 			uint16_t reg_addr = (unsigned int)attr - MAX17205_ATTR_REGS;
 
 			if (reg_addr > MAX17205_AD_MAXVALUE) {
+				LOG_ERR("Register invalid 0x%04X; cannot write", reg_addr);
 				return -EINVAL;
 			}
 			rc = max17205_reg_write(dev, reg_addr, val->val1 & 0x0ffffU);
 		} else {
+			LOG_ERR("Invalid attr: %d", (int)attr);
 			rc = -ENOTSUP;
 		}
 	}
@@ -914,9 +919,11 @@ static int max17205_attr_get(const struct device *dev,
 				val->val2 = 0;
 				rc = max17205_reg_read(dev, reg_addr, (int16_t *)&val->val1);
 			} else {
+				LOG_ERR("Register invalid 0x%04X; cannot read", reg_addr);
 				rc = -EINVAL;
 			}
 		} else {
+			LOG_ERR("Invalid attr: %d", (int)attr);
 			rc = -ENOTSUP;
 		}
 	}
