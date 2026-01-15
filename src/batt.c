@@ -565,7 +565,7 @@ static bool are_batteries_critically_low(void)
 	}
 
 	if (!critically_low) {
-		LOG_DBG("Batteries are not critically low");
+		LOG_INF("Batteries are not critically low");
 	}
 	return critically_low;
 }
@@ -578,7 +578,7 @@ static bool check_for_critically_low_batteries(void)
 	uint16_t v2;
 	uint32_t vbatt;
 
-	LOG_DBG("Check for critically low batteries");
+	LOG_INF("Check for critically low batteries");
 	for (i = 0; i < NUM_PACKS; i++) {
 		if ((rc = max17205_read_batt(packs[i].dev, &vbatt)) != 0 ) {
 			vbatt = 0;
@@ -705,12 +705,13 @@ static void handle_batt(void *p1, void *p2, void *p3)
 
 	for (i = 0; i < NUM_PACKS; i++) {
 		LOG_INF("**** PACK %d ****", i + 1);
+		LOG_INF("Check config registers; update if needed");
 		packs[i].updated = nv_ram_write(packs[i].dev, packs[i].name);
 
-		LOG_INF("**** PACK %d ****", i + 1);
+		LOG_DBG("**** PACK %d ****", i + 1);
 		max17205_print_volatile_memory(packs[i].dev);
 #if VERBOSE_DEBUG
-		LOG_INF("**** PACK %d ****", i + 1);
+		LOG_DBG("**** PACK %d ****", i + 1);
 		max17205_print_nonvolatile_memory(packs[i].dev);
 		max17205_read_history(packs[i].dev);
 #endif
@@ -721,6 +722,7 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	k_msleep(500);
 
 	// Retrieve and use most recently stored hist data from flash
+	LOG_INF("Loading most recent capacity history");
 	if (hist_load_current((uint8_t *)hist_data)) {
 		for (i = 0; i < NUM_PACKS; i++) {
 			LOG_DBG("Loading entry to pack %u:", i);
@@ -745,6 +747,7 @@ static void handle_batt(void *p1, void *p2, void *p3)
 			for (i = 0; i < NUM_PACKS; i++) {
 				populate_pack_hist_data(packs[i].dev, &hist_data[i]);
 			}
+			LOG_INF("Storing capacity history");
 			hist_store_current((const uint8_t *)hist_data);
 		}
 
@@ -765,7 +768,7 @@ static void handle_batt(void *p1, void *p2, void *p3)
 		LOG_INF("================================= loop %u, %u.%03u s", loop, (uint32_t)(ms / 1000), (uint32_t)(ms % 1000));
 
 		for (i = 0; i < NUM_PACKS; i++) {
-			LOG_INF("Populating %s Data", packs[i].name);
+			LOG_INF("Read %s data; send to CAN", packs[i].name);
 
 			if (populate_pack_data(packs[i].dev, &packs[i].data) ) {
 				board_sensors_fill_od();
