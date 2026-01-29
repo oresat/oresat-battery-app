@@ -14,20 +14,6 @@
 
 LOG_MODULE_REGISTER(max17205_intf, CONFIG_APP_BATTERY_LOG_LEVEL);
 
-// DEBUG_PRINT is required for ENABLE_NV_MEMORY_UPDATE_CODE to do anything
-#if DEBUG_PRINT && CONFIG_ENABLE_NV_MEMORY_UPDATE_CODE
-#define NV_WRITE_PROMPT_ENABLED 1
-#else
-#define NV_WRITE_PROMPT_ENABLED 0
-#endif
-
-// DEBUG_PRINT is required for ENABLE_LEARN_COMPLETE to do anything
-#if DEBUG_PRINT && CONFIG_ENABLE_LEARN_COMPLETE
-#define LEARN_COMPLETE_ENABLED 1
-#else
-#define LEARN_COMPLETE_ENABLED 0
-#endif
-
 /*
   The values for batt_nv_programing_cfg are detailed in the google document "MAX17205 Register Values"
   These values were generated using the windows tool from Maxim and while they are probably not totally
