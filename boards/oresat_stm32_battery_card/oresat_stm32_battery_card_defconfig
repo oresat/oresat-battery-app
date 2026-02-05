@@ -9,3 +9,6 @@ CONFIG_UART_CONSOLE=y
 
 # GPIO Controller
 CONFIG_GPIO=y
+
+# Enable special flash controller
+CONFIG_SOC_FLASH_STM32=y

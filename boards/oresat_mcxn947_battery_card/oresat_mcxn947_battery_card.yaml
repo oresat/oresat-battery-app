@@ -1,0 +1,22 @@
+
+
+identifier: oresat mcxn947_battery_card
+name: Oresat-MCXN947-battery-card 
+type: mcu
+arch: arm
+ram: 320
+flash: 2048
+toolchain:
+  - zephyr
+  - gnuarmemb
+supported:
+  - can
+  - dma
+  - flash
+  - gpio
+  - i2c
+  - nvs
+  - regulator
+  - rtc
+  - watchdog
+vendor: psas
