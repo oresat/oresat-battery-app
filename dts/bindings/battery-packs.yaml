@@ -1,0 +1,62 @@
+# Oresat battery pack
+
+description: Oresat battery packs device
+
+compatible: "battery-packs"
+
+properties:
+  "#gpio-cells":
+    type: int
+    required: true
+    description: Number of items to expect in a GPIO specifier
+
+  alert-gpios:
+    type: phandle-array
+    required: true
+    description: |
+      Alert inputs. Number of entries for this and the other gpios
+      should match number of packs.
+
+  charge-stat-oc-gpios:
+    type: phandle-array
+    description: |
+      Charge status inputs
+
+  discharge-stat-oc-gpios:
+    type: phandle-array
+    description: |
+      Disharge status inputs
+
+  charge-disable-gpios:
+    type: phandle-array
+    description: |
+      Charge disable outputs
+
+  discharge-disable-gpios:
+    type: phandle-array
+    description: |
+      Discharge disable outputs
+
+  heater-gpios:
+    type: phandle-array
+    description: |
+      Battery pack heater enable outputs
+
+  moarpwr-gpios:
+    type: phandle-array
+    description: |
+      Single output to request more power allowance so we can
+      enable heaters.
+
+  can-shutdown-gpios:
+    type: phandle-array
+    description: |
+      Single output, active high, to shutdown CAN. This is the
+      lowest power mode.
+
+  can-silent-gpios:
+    type: phandle-array
+    description: |
+      Single output, active high, to turn of TX (receive only).
+
+include: [base.yaml]
