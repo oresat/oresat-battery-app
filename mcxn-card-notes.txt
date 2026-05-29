@@ -1,0 +1,25 @@
+*uart4 - logging, P1_8, UART4_RXD, pin 1; P1_9, UART4_TXD, pin 2 (flexcomm4)
+*i2c0 - pack1, P0_16, I2C0_SDA, pin 84; P0_17, I2C0_SCL, pin 85 (flexcomm0)
+ i2c3 - pack2, P1_0, I2C3_SDA pin 92; P1_1, I2C3_SCL, pin 93 (flexcomm3)
+*can - telemetry, P1_10, CAN0_TX, pin 3; P1_11, CAN0_RX, pin 4
+ gpios -
+   - can-shutdown - P1_14, GPIO1_14, pin 7
+   - can-silent - P1_15, GPIO1_15, pin 8
+	- pack1
+   	- alert P4_0 pin 22
+   	- charge-stat-oc P4_1 pin 23
+   	- discharge-stat-oc P4_2 pin 24
+   	- charge-disable P4_3 pin 25
+   	- discharge-disable P4_4 pin 26
+   	- heater P4_5 pin 27
+	- pack2
+   	- alert P4_6 pin 28
+   	- charge-stat-oc P4_7 pin 29
+   	- discharge-stat-oc P4_12 pin 35
+   	- charge-disable P4_13 pin 36
+   	- discharge-disable P4_15 pin 37
+   	- heater P4_16 pin 38
+	- moarpwr P4_17 pin 39
+	- *led, P1_13, GPIO1_13, pin 6
+
+Note: * denotes same assignment as on the solar card (assuming it is useful to be consistent)
