@@ -245,7 +245,7 @@ static void run_battery_heating_state_machine(void)
 			bool warm_enough = true;
 			uint16_t total_state_of_charge = 0;
 			for (i = 0; i < NUM_PACKS; i++) {
-				if( packs[i].data.avg_temp_1_C <= 5 ) {
+				if( packs[i].data.avg_temp_1_C <= 25 ) { //5 ) {
 					warm_enough = false;
 				}
 				total_state_of_charge += packs[i].data.present_state_of_charge;
@@ -263,7 +263,7 @@ static void run_battery_heating_state_machine(void)
 			bool too_cold = false;
 			bool full_enough = false;
 			for (i = 0; i < NUM_PACKS; i++) {
-				if( packs[i].data.avg_temp_1_C < -5 ) {
+				if( packs[i].data.avg_temp_1_C < 18 ) { //-5 ) {
 					too_cold = true;
 				}
 				if( packs[i].data.present_state_of_charge > 25 ) {
@@ -697,6 +697,9 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	if ((rc = heaters_init()) != 0) {
 		LOG_ERR("Error initializing heaters: %d", rc);
 		goto fatal_exit;
+	}
+	if (IS_ENABLED(CONFIG_ENABLE_HEATERS)) {
+		LOG_INF("HEATERS ENABLED IN BUILD");
 	}
 	heaters_on(false);
 
