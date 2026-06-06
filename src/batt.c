@@ -2,6 +2,7 @@
 #include <zephyr/sys/__assert.h>
 #include <zephyr/device.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/logging/log_ctrl.h>
 #include <zephyr/console/console.h>
 #include <zephyr/drivers/gpio.h>
 #include <canopennode.h>
@@ -683,10 +684,12 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	(void)p3;
 	unsigned int i;
 	int rc;
+	int init_step = 0;
 
 	k_thread_name_set(batt_id, "battery_thread");
 	LOG_INF("Starting battery thread");
 
+	init_step++;
 	// Ensure value in batt.h matches size of array above
 	__ASSERT((sizeof(pack_hist_data_t) * NUM_PACKS) == HIST_DATA_SIZE, "sizeof(hist_data) must match HIST_DATA_SIZE");
 
@@ -694,18 +697,24 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	packs[1].dev = DEVICE_DT_GET(DT_NODELABEL(pack2));
 	static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
 
+	init_step++;
 	console_init();
 
+	init_step++;
 	if (!device_is_ready(led.port)) {
+		log_panic();  // force logs to go out, even in deferred mode
 		LOG_ERR("LED is not ready.");
 		goto fatal_exit;
 	}
+	init_step++;
 	rc = gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
 	if (rc) {
+		log_panic();
 		LOG_ERR("Error configuring LED output: %d", rc);
 		goto fatal_exit;
 	}
 
+	init_step++;
 	if (!device_is_ready(packs[0].dev)) {
 		LOG_ERR("sensor: device pack1 not ready.");
 		packs[0].enabled = false;
@@ -713,6 +722,7 @@ static void handle_batt(void *p1, void *p2, void *p3)
 		packs[0].enabled = true;
 		num_packs_usable++;
 	}
+	init_step++;
 	if (!device_is_ready(packs[1].dev)) {
 		LOG_ERR("sensor: device pack2 not ready.");
 		packs[1].enabled = false;
@@ -721,19 +731,26 @@ static void handle_batt(void *p1, void *p2, void *p3)
 		num_packs_usable++;
 	}
 
+	init_step++;
 	if ((rc = hist_init()) != 0) {
+		log_panic();
+		LOG_ERR("Could not initialize history.");
 		goto fatal_exit;
 	}
 
+	init_step++;
 	if ((rc = heaters_init()) != 0) {
+		log_panic();
 		LOG_ERR("Error initializing heaters: %d", rc);
 		goto fatal_exit;
 	}
 	if (IS_ENABLED(CONFIG_ENABLE_HEATERS)) {
 		LOG_INF("HEATERS ENABLED IN BUILD");
 	}
+	init_step++;
 	heaters_on(false);
 
+	init_step++;
 	check_for_critically_low_batteries();
 	k_msleep(3000);
 
@@ -835,7 +852,7 @@ static void handle_batt(void *p1, void *p2, void *p3)
 
 fatal_exit:
 	k_msleep(1000);
-	__ASSERT(false, "Fatal error");
+	__ASSERT(false, "Fatal error in step: %d", init_step);
 }
 
 uint32_t batt_event_wait(bool reset, k_timeout_t timeout)
