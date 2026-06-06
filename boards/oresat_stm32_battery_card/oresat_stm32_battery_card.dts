@@ -71,8 +71,8 @@
 		sw0 = &user_button;
 		pwm-led0 = &amber_pwm_led;
 		watchdog0 = &iwdg;
-		/* die-temp0 = &die_temp; */
-		/* volt-sensor0 = &vref; */
+		die-temp0 = &die_temp;
+		volt-sensor0 = &vref;
 		volt-sensor1 = &vbat;
 	};
 };
@@ -212,15 +212,15 @@
 };
 
 &adc1 {
-	pinctrl-0 = <&adc_in6_pa6>; /* currently routed to pa8, which is not ADC-capable */
-	pinctrl-names = "default";
+	//pinctrl-0 = <&adc_in6_pa6>; /* currently routed to pa8, which is not ADC-capable */
+	//pinctrl-names = "default";
 	st,adc-clock-source = "SYNC";
 	st,adc-prescaler = <2>;
-	status = "disabled"; /* disable for now */
+	status = "okay"; /* disable for now */
 };
 
 &die_temp {
-	status = "disabled";
+	status = "okay";
 };
 
 &dac1 {
@@ -246,7 +246,7 @@
 };
 
 &vref {
-	status = "disabled";
+	status = "okay";
 };
 
 &vbat {
