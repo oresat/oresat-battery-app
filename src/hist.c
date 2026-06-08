@@ -136,7 +136,15 @@ static int hist_find_last(void)
 	for (unsigned int i = 0; i < NUM_HIST_ENTRIES; i++) {
 		rc = fcb_getnext(&hist_fcb, &loc);
 		if (rc == -ENOTSUP) {
-			LOG_DBG("End of history.");
+			LOG_DBG("End of history at entry %d=u.", i);
+			rc = 0; // if the flash contains garbage, erase it when there are no entries
+			if (!last_valid_loc.fe_sector) { // no good entries found
+				LOG_WRN("Bad data found in otherwise empty history partition (%u); erasing", i);
+				rc = fcb_clear(&hist_fcb);
+				if (rc) {
+					LOG_ERR("Error erasing history partition");
+				}
+			}
 			break;
 		}
 		else if (rc) {
@@ -169,7 +177,7 @@ static int hist_find_last(void)
 				break;
 			}
 		} else {
-			LOG_DBG("CRC failure on entry %u", i);
+			LOG_WRN("CRC failure on entry %u", i);
 		}
 	}
 	// We found a good entry, so we can advance the reset cycle count.
@@ -307,7 +315,7 @@ bool hist_store_current(const uint8_t hist_data[HIST_DATA_SIZE])
 			LOG_DBG("Done.");
 			ret = true;
 	} else {
-		LOG_DBG("ERROR: Unable to store current history entry.");
+		LOG_INF("ERROR: Unable to store current history entry.");
 	}
 	hist_entry_print(&new_data, prefix);
 	return ret;

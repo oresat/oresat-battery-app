@@ -778,14 +778,16 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	k_msleep(500);
 
 	// Retrieve and use most recently stored hist data from flash
-	LOG_INF("Loading most recent capacity history");
 	if (hist_load_current((uint8_t *)hist_data)) {
+		LOG_INF("Loading most recent runtime capacity history");
 		for (i = 0; i < NUM_PACKS; i++) {
 			if (packs[i].enabled) {
-				LOG_DBG("Loading entry to pack %u:", i);
+				LOG_INF("Loading runtime history entry to pack %u:", i);
 				utilize_pack_hist_data(packs[i].dev, &hist_data[i]);
 			}
 		}
+	} else {
+		LOG_WRN("No runtime capacity history loaded!");
 	}
 
 	uint32_t loop = 0;
@@ -808,7 +810,11 @@ static void handle_batt(void *p1, void *p2, void *p3)
 				}
 			}
 			LOG_INF("Storing capacity history");
-			hist_store_current((const uint8_t *)hist_data);
+			if (hist_store_current((const uint8_t *)hist_data)) {
+				LOG_INF("Success");
+			} else {
+				LOG_WRN("Failure");
+			}
 		}
 
 		if (ms >= next_led_update_ms) {
