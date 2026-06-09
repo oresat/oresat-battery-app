@@ -38,6 +38,7 @@ K_EVENT_DEFINE(batt_event);
 #endif
 
 #define NV_WRITE_PROMPT_TIMEOUT_S 15
+#define MAX_I2C_RECOVERY_RETRIES 10
 
 // Voltage below which we should stop everything until charging starts
 #define SHUTDOWN_MV 2850
@@ -676,6 +677,36 @@ static void utilize_pack_hist_data(const struct device *dev, const pack_hist_dat
 	}
 }
 
+static int recover_bus(int bus)
+{
+	int err;
+	int retry = 1;
+	const struct device *i2c = (bus == 1) ? DEVICE_DT_GET(DT_NODELABEL(i2c1)) : DEVICE_DT_GET(DT_NODELABEL(i2c2));
+
+	if (!device_is_ready(i2c)) {
+		LOG_ERR("I2C bus %d is not ready", bus);
+		if (bus == 1) {
+			LOG_ERR("Cannot recover i2c%d: I2C device itself is not ready", bus);
+			return -ENODEV;
+		}
+	}
+
+	LOG_WRN("Attempting I2C bus %d recovery", bus);
+	do {
+		err = i2c_recover_bus(i2c);
+		if (err) {
+			LOG_WRN("I2C bus %d is stuck (err: %d); recovery failed; attempt: %d", bus, err, retry++);
+		}
+		k_sleep(K_MSEC(10));
+	} while (err && (retry < MAX_I2C_RECOVERY_RETRIES));
+
+	if (err) {
+		LOG_ERR("Unable to recover I2C bus %d after %d retries. Rebooting.", bus, retry);
+	}
+
+	return err;
+}
+
 /* Battery monitoring thread */
 static void handle_batt(void *p1, void *p2, void *p3)
 {
@@ -718,6 +749,7 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	if (!device_is_ready(packs[0].dev)) {
 		LOG_ERR("sensor: device pack1 not ready.");
 		packs[0].enabled = false;
+		recover_bus(1);
 	} else {
 		packs[0].enabled = true;
 		num_packs_usable++;
@@ -726,6 +758,7 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	if (!device_is_ready(packs[1].dev)) {
 		LOG_ERR("sensor: device pack2 not ready.");
 		packs[1].enabled = false;
+		recover_bus(2);
 	} else {
 		packs[1].enabled = true;
 		num_packs_usable++;
