@@ -40,6 +40,7 @@ K_EVENT_DEFINE(batt_event);
 
 #define NV_WRITE_PROMPT_TIMEOUT_S 15
 #define MAX_I2C_RECOVERY_RETRIES 10
+#define MAX_RECOVERY_BOOTS 10
 
 // Voltage below which we should stop everything until charging starts
 #define SHUTDOWN_MV 2850
@@ -731,6 +732,7 @@ static int recover_bus(int bus)
 
 	if (err) {
 		store_recovery_count(load_recovery_count() + 1); // reset since we're good
+		settings_commit();
 		k_sleep(K_MSEC(500)); // give settings time to be written to flash
 		__ASSERT(err == 0, "Unable to recover I2C bus %d after %d retries. Rebooting.", bus, retry);
 	}
@@ -760,6 +762,9 @@ static void handle_batt(void *p1, void *p2, void *p3)
 
 	rec_count = load_recovery_count();
 	LOG_INF("  I2C recovery count: %d", rec_count);
+	if (rec_count >= MAX_RECOVERY_BOOTS) {
+		LOG_ERR("Unable to recover i2c bus after 10 resets. Will stop trying.");
+	}
 
 	init_step++;
 	// Ensure value in batt.h matches size of array above
@@ -790,7 +795,9 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	if (!device_is_ready(packs[0].dev)) {
 		LOG_ERR("sensor: device pack1 not ready.");
 		packs[0].enabled = false;
-		recover_bus(1);
+		if (rec_count < MAX_RECOVERY_BOOTS) {
+			recover_bus(1);
+		}
 	} else {
 		packs[0].enabled = true;
 		num_packs_usable++;
@@ -799,7 +806,9 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	if (!device_is_ready(packs[1].dev)) {
 		LOG_ERR("sensor: device pack2 not ready.");
 		packs[1].enabled = false;
-		recover_bus(2);
+		if (rec_count < MAX_RECOVERY_BOOTS) {
+			recover_bus(2);
+		}
 	} else {
 		packs[1].enabled = true;
 		num_packs_usable++;
