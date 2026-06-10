@@ -3,6 +3,7 @@
 #include <zephyr/device.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
+#include <zephyr/settings/settings.h>
 #include <zephyr/console/console.h>
 #include <zephyr/drivers/gpio.h>
 #include <canopennode.h>
@@ -677,6 +678,34 @@ static void utilize_pack_hist_data(const struct device *dev, const pack_hist_dat
 	}
 }
 
+static uint8_t load_recovery_count(void)
+{
+	int rc;
+	uint8_t recovery_count = 0;
+
+	settings_load();
+
+	rc = settings_load_one("recovery_count", (void *)&recovery_count, sizeof(recovery_count));
+	if (rc < 0) {
+		LOG_ERR("Error loading recovery_count from settings: %d", rc);
+	}
+	if (!recovery_count) {
+		recovery_count = 0;
+	}
+	return recovery_count;
+}
+
+static int store_recovery_count(uint8_t recovery_count)
+{
+	int rc;
+
+	rc = settings_save_one("recovery_count", &recovery_count, sizeof(recovery_count));
+	if (rc < 0) {
+		LOG_ERR("Error saving recovery_count to settings: %d", rc);
+	}
+	return rc;
+}
+
 static int recover_bus(int bus)
 {
 	int err;
@@ -697,13 +726,16 @@ static int recover_bus(int bus)
 		if (err) {
 			LOG_WRN("I2C bus %d is stuck (err: %d); recovery failed; attempt: %d", bus, err, retry++);
 		}
-		k_sleep(K_MSEC(10));
+		k_sleep(K_MSEC(500));
 	} while (err && (retry < MAX_I2C_RECOVERY_RETRIES));
 
 	if (err) {
-		LOG_ERR("Unable to recover I2C bus %d after %d retries. Rebooting.", bus, retry);
+		store_recovery_count(load_recovery_count() + 1); // reset since we're good
+		k_sleep(K_MSEC(500)); // give settings time to be written to flash
+		__ASSERT(err == 0, "Unable to recover I2C bus %d after %d retries. Rebooting.", bus, retry);
 	}
 
+	store_recovery_count(0); // reset since we're good
 	return err;
 }
 
@@ -716,9 +748,18 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	unsigned int i;
 	int rc;
 	int init_step = 0;
+	int rec_count;
 
 	k_thread_name_set(batt_id, "battery_thread");
 	LOG_INF("Starting battery thread");
+
+	rc = settings_subsys_init();
+	if (rc) {
+		LOG_ERR("settings subsys initialization: fail (err %d)", rc);
+	}
+
+	rec_count = load_recovery_count();
+	LOG_INF("  I2C recovery count: %d", rec_count);
 
 	init_step++;
 	// Ensure value in batt.h matches size of array above
@@ -786,6 +827,12 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	init_step++;
 	check_for_critically_low_batteries();
 	k_msleep(3000);
+
+	if (rec_count && packs[0].enabled && packs[1].enabled) {
+		if (!store_recovery_count(0)) {
+			LOG_INF("Bus recovery worked. Resetting count.");
+		}
+	}
 
 	for (i = 0; i < NUM_PACKS; i++) {
 		if (!packs[i].enabled) {
