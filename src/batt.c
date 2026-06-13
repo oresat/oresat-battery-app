@@ -26,6 +26,7 @@ LOG_MODULE_DECLARE(app_battery, CONFIG_APP_BATTERY_LOG_LEVEL);
 
 #define BATT_THREAD_STACK_SIZE 2048
 #define BATT_THREAD_PRIORITY 0
+#define BATTERY_STARTUP_DELAY 400
 extern const k_tid_t batt_id;
 
 K_EVENT_DEFINE(batt_event);
@@ -128,10 +129,9 @@ pack_t *get_pack(unsigned int pack)
 	}
 }
 
-static int heaters_init(void)
+static int general_gpios_init(void)
 {
 	int ret;
-	int pack;
 
 	ret = gpio_pin_configure_dt(&moarpwr, GPIO_OUTPUT_INACTIVE);
 	if (ret) {
@@ -142,11 +142,26 @@ static int heaters_init(void)
 	if (ret) {
 		return ret;
 	}
+	ret = gpio_pin_set_dt(&can_shutdown, false); // set true to shutdown can
+	if (ret) {
+		return ret;
+	}
 
 	ret = gpio_pin_configure_dt(&can_silent, GPIO_OUTPUT_INACTIVE);
 	if (ret) {
 		return ret;
 	}
+	ret = gpio_pin_set_dt(&can_silent, false); // set true to silence can
+	if (ret) {
+		return ret;
+	}
+	return ret;
+}
+
+static int pack_gpios_init(void)
+{
+	int ret;
+	int pack;
 
 	for (pack = 0; pack < NUM_PACKS; pack++) {
 		ret = gpio_pin_configure_dt(&packs[pack].heater_on, GPIO_OUTPUT_INACTIVE);
@@ -679,6 +694,7 @@ static void utilize_pack_hist_data(const struct device *dev, const pack_hist_dat
 	}
 }
 
+#if defined(CONFIG_SETTINGS)
 static uint8_t load_recovery_count(void)
 {
 	int rc;
@@ -706,11 +722,23 @@ static int store_recovery_count(uint8_t recovery_count)
 	}
 	return rc;
 }
+#else
+static uint8_t load_recovery_count(void)
+{
+	return 0;
+}
+
+static int store_recovery_count(uint8_t recovery_count)
+{
+	return 0;
+}
+#endif
 
 static int recover_bus(int bus)
 {
 	int err;
 	int retry = 1;
+	int rec_count;
 	const struct device *i2c = (bus == 1) ? DEVICE_DT_GET(DT_NODELABEL(i2c1)) : DEVICE_DT_GET(DT_NODELABEL(i2c2));
 
 	if (!device_is_ready(i2c)) {
@@ -722,6 +750,8 @@ static int recover_bus(int bus)
 	}
 
 	LOG_WRN("Attempting I2C bus %d recovery", bus);
+	rec_count = load_recovery_count();
+
 	do {
 		err = i2c_recover_bus(i2c);
 		if (err) {
@@ -731,13 +761,20 @@ static int recover_bus(int bus)
 	} while (err && (retry < MAX_I2C_RECOVERY_RETRIES));
 
 	if (err) {
-		store_recovery_count(load_recovery_count() + 1); // reset since we're good
-		settings_commit();
-		k_sleep(K_MSEC(500)); // give settings time to be written to flash
-		__ASSERT(err == 0, "Unable to recover I2C bus %d after %d retries. Rebooting.", bus, retry);
+		if (rec_count < MAX_RECOVERY_BOOTS)  {
+			store_recovery_count(rec_count + 1); // reset since we're good
+#if defined(CONFIG_SETTINGS)
+			settings_commit();
+#endif
+			k_sleep(K_MSEC(500)); // give settings time to be written to flash
+			__ASSERT(err == 0, "Unable to recover I2C bus %d after %d retries. Rebooting.", bus, retry);
+		} else {
+			LOG_ERR("Cannot recover i2c bus after 10 reboot attempts. Giving up.");
+		}
+	} else if (rec_count) {
+		LOG_INF("Resetting recovery count. Recovery successful");
+		store_recovery_count(0); // reset since we're good
 	}
-
-	store_recovery_count(0); // reset since we're good
 	return err;
 }
 
@@ -755,10 +792,19 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	k_thread_name_set(batt_id, "battery_thread");
 	LOG_INF("Starting battery thread");
 
+	rc = general_gpios_init();
+	if (rc) {
+		LOG_ERR("General GPIOs failed to init: %d", rc);
+	}
+
+	k_sleep(K_MSEC(BATTERY_STARTUP_DELAY));
+
+#if defined(CONFIG_SETTINGS)
 	rc = settings_subsys_init();
 	if (rc) {
 		LOG_ERR("settings subsys initialization: fail (err %d)", rc);
 	}
+#endif
 
 	rec_count = load_recovery_count();
 	LOG_INF("  I2C recovery count: %d", rec_count);
@@ -795,8 +841,18 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	if (!device_is_ready(packs[0].dev)) {
 		LOG_ERR("sensor: device pack1 not ready.");
 		packs[0].enabled = false;
-		if (rec_count < MAX_RECOVERY_BOOTS) {
-			recover_bus(1);
+		recover_bus(1);
+        rc = device_init(packs[0].dev);
+        if (rc == -EALREADY) {
+            LOG_DBG("Device already initialized.");
+        } else if (rc) {
+            LOG_ERR("Error reinitializing the pack1: %d", rc);
+        }
+		if (rc) {
+			LOG_ERR("Error initializing pack1: %d", rc);
+		}
+		if (device_is_ready(packs[0].dev)) {
+			LOG_INF("I2C bus recovery successful.");
 		}
 	} else {
 		packs[0].enabled = true;
@@ -806,8 +862,18 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	if (!device_is_ready(packs[1].dev)) {
 		LOG_ERR("sensor: device pack2 not ready.");
 		packs[1].enabled = false;
-		if (rec_count < MAX_RECOVERY_BOOTS) {
-			recover_bus(2);
+		recover_bus(2);
+        rc = device_init(packs[1].dev);
+        if (rc == -EALREADY) {
+            LOG_DBG("Device already initialized.");
+        } else if (rc) {
+            LOG_ERR("Error reinitializing the pack1: %d", rc);
+        }
+		if (rc) {
+			LOG_ERR("Error initializing pack1: %d", rc);
+		}
+		if (device_is_ready(packs[1].dev)) {
+			LOG_INF("I2C bus recovery successful.");
 		}
 	} else {
 		packs[1].enabled = true;
@@ -822,9 +888,9 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	}
 
 	init_step++;
-	if ((rc = heaters_init()) != 0) {
+	if ((rc = pack_gpios_init()) != 0) {
 		log_panic();
-		LOG_ERR("Error initializing heaters: %d", rc);
+		LOG_ERR("Error initializing pack GPIOs: %d", rc);
 		goto fatal_exit;
 	}
 	if (IS_ENABLED(CONFIG_ENABLE_HEATERS)) {

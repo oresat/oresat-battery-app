@@ -56,12 +56,41 @@ We define two for user convenience:
 - `overlay_calib.conf`: Override Kconfig fragment for building the application with calibration enabled (used prior to launch).
 - `overlay_debug.conf`: Override Kconfig fragment for building the application with lots of debug logging and ability to use gdb well.
 
+
+# Building and flashing
+Ensure you are in the `battery` directory (`cd src/oresat/firmware/apps/battery`) prior to building.
+
+> NOTE:
+>   The `oresat_stm32_battery_card` is the default. It normally does not need to be specified as shown below,
+>   except for the important exception of enabling MCUboot. In that case, it is mandatory for Zephyr 4.2.0.
+
+> NOTE:
+>   The stm32 version of the battery card does not have MCUboot support.
+
+| Board         | Build Example                                         |
+| ------------- | ----------------------------------------------------- |
+| oresat_stm32_battery_card | `west build -p always -b oresat_stm32_battery_card/mcxn947/cpu0` |
+| oresat_stm32_battery_card with calibration | `west build -p always -b oresat_stm32_battery_card/mcxn947/cpu0 -- -DEXTRA_CONF_FILE=overlay_calib.conf` |
+| oresat_stm32_battery_card debug and calibration | `west build -p always -b oresat_stm32_battery_card/mcxn947/cpu0 -- -DEXTRA_CONF_FILE=1overlay_calib.conf;overlay_debug.conf` |
+
+> NOTE: the section below only gives general instructions. Specific steps below (like for setting the CAN node id) are self-contained
+>   in the section.
+
+## First build
+
+For the first build:
+```
+$ west build -p
+$ west flash --erase -r openocd
+```
+This does a clean build and makes sure the full flash is empty.
+
 ## Building
 A simple default build using `west` that forces a complete rebuild:
 ```
-$ west build -p always
+$ west build -p
 ```
-> **Note: omit `-p always` for an incremental build.**
+> **Note: omit `-p` for an incremental build.**
 
 A build that changes a single Kconfig symbol value:
 ```
@@ -79,7 +108,11 @@ Or for more than one Kconfig fragment, do this:
 $ west build -- -DEXTRA_CONF_FILE='overlay_calib.conf;overlay_debug.conf'
 ```
 
-## Shortcomings of original Oresat battery app
+## Setting the CAN node id
+For the stm32 version of the battery card, follow the process as documented for the
+[ChibiOS version](https://github.com/oresat/oresat-firmware/blob/master/toolchain/flash_node_id.py).
+
+# Shortcomings of original Oresat battery app
 - original code was not using all register values from the Maxim Wizard software with no explanation as to why
 - no learning cycles performed -- full charge/discharge never done to tune the fuel guage prior to launch
 - lots of duplicate code differing only in pack1 vs. pack2

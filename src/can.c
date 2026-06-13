@@ -21,6 +21,7 @@ LOG_MODULE_REGISTER(can_thread, CONFIG_APP_BATTERY_LOG_LEVEL);
 
 #define CAN_THREAD_STACK_SIZE 2048
 #define CAN_THREAD_PRIORITY 0
+#define CAN_SETUP_DELAY 200
 extern const k_tid_t can_id;
 
 static void handle_can(void *p1, void *p2, void *p3)
@@ -34,6 +35,7 @@ static void handle_can(void *p1, void *p2, void *p3)
 	uint8_t node_id = oresat_get_node_id();
 
 	k_thread_name_set(can_id, "can_thread");
+	k_sleep(K_MSEC(CAN_SETUP_DELAY));
 
 	LOG_INF("Starting CAN thread");
 
