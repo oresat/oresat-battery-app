@@ -9,6 +9,35 @@ project(app_battery LANGUAGES C)
 
 #execute_process(COMMAND bash -c "oresat-configs canopennode ${CMAKE_CURRENT_SOURCE_DIR}/od.yaml ${CMAKE_CURRENT_SOURCE_DIR}/../../common/od.yaml -d gen"
 
+set(VERSION_MAJOR "1")
+set(VERSION_MINOR "0")
+set(PATCHLEVEL "0")
+set(VERSION_TWEAK "0")
+set(EXTRAVERSION "00000000")
+
+find_package(Git QUIET REQUIRED)
+
+execute_process(
+    COMMAND "${GIT_EXECUTABLE}" describe --always HEAD
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    RESULT_VARIABLE res
+    OUTPUT_VARIABLE EXTRAVERSION
+    ERROR_QUIET
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+set_property(GLOBAL APPEND
+    PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/.git/index")
+
+#
+# utilize settings to autogenerate a header file to adjust the build inside the C code
+#
+configure_file (
+   "${PROJECT_SOURCE_DIR}/src/VERSION.in"
+   "${PROJECT_SOURCE_DIR}/VERSION"
+   )
+include_directories("${PROJECT_SOURCE_DIR}") # needed so c code can find this header
+
 target_sources(app PRIVATE
   src/main.c
   src/batt.c

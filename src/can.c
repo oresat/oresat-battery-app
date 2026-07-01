@@ -21,12 +21,14 @@ LOG_MODULE_REGISTER(can_thread, CONFIG_APP_BATTERY_LOG_LEVEL);
 
 #define CAN_THREAD_STACK_SIZE 2048
 #define CAN_THREAD_PRIORITY 0
+#define CAN_SETUP_DELAY 200
 extern const k_tid_t can_id;
 
 static void handle_can(void *p1, void *p2, void *p3)
 {
 	int err;
 	uint16_t timeout;
+	uint16_t wr_timeout_count;
 	uint32_t elapsed = 0U;
 	int64_t timestamp;
 	CO_NMT_reset_cmd_t reset = CO_RESET_NOT;
@@ -34,6 +36,7 @@ static void handle_can(void *p1, void *p2, void *p3)
 	uint8_t node_id = oresat_get_node_id();
 
 	k_thread_name_set(can_id, "can_thread");
+	k_sleep(K_MSEC(CAN_SETUP_DELAY));
 
 	LOG_INF("Starting CAN thread");
 
@@ -54,18 +57,23 @@ static void handle_can(void *p1, void *p2, void *p3)
 	LOG_INF("CANopen stack initialized for node %u", node_id);
 
 	CO_CANsetNormalMode(CO->CANmodule[0]);
+	wr_timeout_count = 0;
 
 	while (true) {
 		bool_t syncWas = false;
 
-		timeout = 1000U;
+		timeout = 1U;
 		timestamp = k_uptime_get();
 
-		/* Read inputs */
-		CO_process_RPDO(CO, syncWas);
+		if (wr_timeout_count++ >= 1000U) {
+			wr_timeout_count = 0U;
 
-		/* Write outputs */
-		CO_process_TPDO(CO, syncWas, timeout * 1000U);
+			/* Read inputs */
+			CO_process_RPDO(CO, syncWas);
+
+			/* Write outputs */
+			CO_process_TPDO(CO, syncWas, timeout * 1000U * 1000U);
+		}
 
 		reset = CO_process(CO, (uint16_t)elapsed, &timeout);
 		if (reset != CO_RESET_NOT) {

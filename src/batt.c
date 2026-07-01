@@ -2,6 +2,8 @@
 #include <zephyr/sys/__assert.h>
 #include <zephyr/device.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/logging/log_ctrl.h>
+#include <zephyr/settings/settings.h>
 #include <zephyr/console/console.h>
 #include <zephyr/drivers/gpio.h>
 #include <canopennode.h>
@@ -24,6 +26,7 @@ LOG_MODULE_DECLARE(app_battery, CONFIG_APP_BATTERY_LOG_LEVEL);
 
 #define BATT_THREAD_STACK_SIZE 2048
 #define BATT_THREAD_PRIORITY 0
+#define BATTERY_STARTUP_DELAY 400
 extern const k_tid_t batt_id;
 
 K_EVENT_DEFINE(batt_event);
@@ -37,6 +40,8 @@ K_EVENT_DEFINE(batt_event);
 #endif
 
 #define NV_WRITE_PROMPT_TIMEOUT_S 15
+#define MAX_I2C_RECOVERY_RETRIES 10
+#define MAX_RECOVERY_BOOTS 10
 
 // Voltage below which we should stop everything until charging starts
 #define SHUTDOWN_MV 2850
@@ -112,41 +117,8 @@ typedef struct __attribute__((packed)) runtime_pack_data {
 
 static pack_hist_data_t hist_data[NUM_PACKS];
 
-#if 0
-#define GPIO_NODE DT_NODELABEL(gpiob)
-#define CAN_ID_PIN_0 3
-#define CAN_ID_PIN_1 4
-/* Not sure if these CAN ID signals are actually used, but they're on the schematic */
-static int get_can_id(void)
-{
-	const struct device *gpio_dev = DEVICE_DT_GET(GPIO_NODE);
-	int id = 0;
-	int val;
-
-	val = gpio_pin_configure(gpio_dev, CAN_ID_PIN_0, GPIO_INPUT | GPIO_PULL_UP);
-	if (val < 0) {
-		return val;
-	}
-	val = gpio_pin_configure(gpio_dev, CAN_ID_PIN_1, GPIO_INPUT | GPIO_PULL_UP);
-	if (val < 0) {
-		return val;
-	}
-
-	val = gpio_pin_get(gpio_dev, CAN_ID_PIN_0);
-	if (val < 0) {
-		return val;
-	}
-	id = val;
-
-	val = gpio_pin_get(gpio_dev, CAN_ID_PIN_1);
-	if (val < 0) {
-		return val;
-	}
-	id |= val << 1;
-
-	return id;
-}
-#endif
+// Failsafe flags -- tolerate hardware failures on everything not essential to controlling heaters
+static unsigned num_packs_usable;
 
 pack_t *get_pack(unsigned int pack)
 {
@@ -157,10 +129,9 @@ pack_t *get_pack(unsigned int pack)
 	}
 }
 
-static int heaters_init(void)
+static int general_gpios_init(void)
 {
 	int ret;
-	int pack;
 
 	ret = gpio_pin_configure_dt(&moarpwr, GPIO_OUTPUT_INACTIVE);
 	if (ret) {
@@ -171,11 +142,26 @@ static int heaters_init(void)
 	if (ret) {
 		return ret;
 	}
+	ret = gpio_pin_set_dt(&can_shutdown, false); // set true to shutdown can
+	if (ret) {
+		return ret;
+	}
 
 	ret = gpio_pin_configure_dt(&can_silent, GPIO_OUTPUT_INACTIVE);
 	if (ret) {
 		return ret;
 	}
+	ret = gpio_pin_set_dt(&can_silent, false); // set true to silence can
+	if (ret) {
+		return ret;
+	}
+	return ret;
+}
+
+static int pack_gpios_init(void)
+{
+	int ret;
+	int pack;
 
 	for (pack = 0; pack < NUM_PACKS; pack++) {
 		ret = gpio_pin_configure_dt(&packs[pack].heater_on, GPIO_OUTPUT_INACTIVE);
@@ -221,6 +207,31 @@ static void heaters_on(bool on)
 	}
 }
 
+#if defined(CONFIG_BOARD_ORESAT_STM32_BATTERY_CARD)
+//static const struct device *const dev_vref = DEVICE_DT_GET_ONE(st_stm32_vref);
+#if !DT_HAS_ALIAS(die_temp0)
+#error No die temp!
+#endif
+#define TEMP_NODE DT_ALIAS(die_temp0)
+static const struct device *const dev_die_temp = DEVICE_DT_GET(TEMP_NODE);
+
+/**
+ * @brief Read processor temperature
+ */
+int16_t read_die_temp(void)
+{
+	struct sensor_value die_temp;
+
+	sensor_sample_fetch(dev_die_temp);
+	sensor_channel_get(dev_die_temp, SENSOR_CHAN_DIE_TEMP, &die_temp);
+
+	LOG_INF("Processor die temperature: %d", die_temp.val1);
+	return (int16_t)die_temp.val1;
+}
+#else
+#error "read_die_temp is not yet supported"
+#endif
+
 /**
  * @brief Runs the battery state machine, responsible for turning on/off heaters, charging, discharging etc.
  */
@@ -229,48 +240,61 @@ static void run_battery_heating_state_machine(void)
 {
 	unsigned int i;
 
-	for (i = 0; i < NUM_PACKS; i++) {
-		if (!packs[i].data.is_data_valid) {
-			LOG_DBG("FAILSAFE: ");
-			heaters_on(false);
-			return;
+	if (num_packs_usable == NUM_PACKS) {  // do not compromise battery viability if we cannot obtain capacity at all from one or neither
+		for (i = 0; i < NUM_PACKS; i++) {
+			if (packs[i].enabled && !packs[i].data.is_data_valid) {
+				LOG_DBG("FAILSAFE: ");
+				heaters_on(false);
+				return;
+			}
+		}
+	}
+
+	uint16_t total_state_of_charge = 0;
+	bool full_enough = false; // Once the batteries are > 25 percent full, it's ok to run the heaters
+	bool warm_enough = false; // Once they’re greater than 5 °C, can turn off heaters
+	bool too_cold = false;    // Once they’re less than -5 °C, can turn on heaters
+
+	if (!num_packs_usable) {
+		int16_t die_temp = read_die_temp();
+
+		total_state_of_charge = 50;
+		full_enough = true; // we don't know so assume we're ok to run the heaters if neede
+		if (die_temp < -5) {
+			too_cold = true;
+		}
+		if (die_temp > 5) {
+			warm_enough = true;
+		}
+	} else {
+		for (i = 0; i < NUM_PACKS; i++) {
+			if (packs[i].enabled) {
+				total_state_of_charge += packs[i].data.present_state_of_charge;
+			}
+			if (packs[i].data.avg_temp_1_C < -5) {
+				too_cold = true;
+			}
+			if (packs[i].data.avg_temp_1_C > 5) {
+				warm_enough = true;
+			}
+		}
+		total_state_of_charge /= num_packs_usable;
+		if (total_state_of_charge > 25) {
+			full_enough = true;
 		}
 	}
 
 	switch (current_battery_state_machine_state) {
 		case BATTERY_STATE_MACHINE_STATE_HEATING:
 			heaters_on(true);
-
-			//Once they’re greater than 5 °C or the combined pack capacity is < 25%
-			bool warm_enough = true;
-			uint16_t total_state_of_charge = 0;
-			for (i = 0; i < NUM_PACKS; i++) {
-				if( packs[i].data.avg_temp_1_C <= 5 ) {
-					warm_enough = false;
-				}
-				total_state_of_charge += packs[i].data.present_state_of_charge;
-			}
-			total_state_of_charge /= NUM_PACKS;
-			if( warm_enough || (total_state_of_charge < 25) ) {
+			if (warm_enough || !full_enough) {
 				current_battery_state_machine_state = BATTERY_STATE_MACHINE_STATE_NOT_HEATING;
 				LOG_DBG("Turning heaters OFF");
 			}
 			break;
 		case BATTERY_STATE_MACHINE_STATE_NOT_HEATING:
 			heaters_on(false);
-
-			//Once they’re less than -5 °C and the combined pack capacity is > 25%
-			bool too_cold = false;
-			bool full_enough = false;
-			for (i = 0; i < NUM_PACKS; i++) {
-				if( packs[i].data.avg_temp_1_C < -5 ) {
-					too_cold = true;
-				}
-				if( packs[i].data.present_state_of_charge > 25 ) {
-					full_enough = true;
-				}
-			}
-			if( too_cold && full_enough ) {
+			if (too_cold && full_enough) {
 				current_battery_state_machine_state = BATTERY_STATE_MACHINE_STATE_HEATING;
 				LOG_DBG("Turning heaters ON");
 			}
@@ -331,17 +355,30 @@ static void update_battery_charging_state(const pack_t *pack)
  * @param dev[in] The MAX17205 driver object to use to query
  *		 pack data from
  * @param *dest[out] Destination into which to store pack data
- *	  currently tracked in the MAX17205
+ *    currently tracked in the MAX17205
+ * @param enabled True if we can talk to this MAX17205
  *
  * @return true on success, false otherwise
  */
-static bool populate_pack_data(const struct device *dev, batt_pack_data_t *dest)
+static bool populate_pack_data(const struct device *dev, batt_pack_data_t *dest, bool enabled)
 {
 	int rc;
-	memset(dest, 0, sizeof(*dest));
 
+	memset(dest, 0, sizeof(*dest));
 	dest->is_data_valid = true;
 
+	if (!enabled) { // hardware failure
+		int16_t die_temp = read_die_temp();
+
+		// data will be all zeros, but populate the temperature as die temp if we can
+		dest->temp_1_C = dest->temp_2_C = die_temp;
+
+		LOG_DBG("");
+		LOG_WRN("PACK DISABLED");
+		LOG_DBG("Temperature (C): die temp = %d", die_temp);
+		LOG_DBG("");
+		return true;
+	}
 
 	if( (rc = max17205_read_average_temperature(dev, MAX17205_CHAN_TEMP_1, &dest->temp_1_C)) != 0 ) {
 		dest->is_data_valid = false;
@@ -541,8 +578,8 @@ static void populate_od_pack_data(pack_t *pack)
 		CO_OD_RAM.pack_2.time_to_full = MIN(pack_data->time_to_full_seconds, UINT16_MAX);
 		CO_OD_RAM.pack_2.cycles = pack_data->cycles;
 		CO_OD_RAM.pack_2.reported_state_of_charge = pack_data->reported_state_of_charge;
-		CO_OD_RAM.pack_2.temperature = CLAMP(pack_data->temp_1_C, INT8_MIN, INT8_MAX);
-		CO_OD_RAM.pack_2.temperature_avg = CLAMP(pack_data->avg_temp_1_C, INT8_MIN, INT8_MAX);
+		CO_OD_RAM.pack_2.temperature = CLAMP(pack_data->temp_2_C, INT8_MIN, INT8_MAX);
+		CO_OD_RAM.pack_2.temperature_avg = CLAMP(pack_data->avg_temp_2_C, INT8_MIN, INT8_MAX);
 		CO_OD_RAM.pack_2.temperature_max = pack_data->temp_max_C;
 		CO_OD_RAM.pack_2.temperature_min = pack_data->temp_min_C;
 	} else {
@@ -557,6 +594,9 @@ static bool are_batteries_critically_low(void)
 	bool critically_low = false;
 
 	for (i = 0; i < NUM_PACKS; i++) {
+		if (!packs[i].enabled) {
+			continue;
+		}
 		if ((packs[i].data.v_cell_1_mV < SHUTDOWN_MV) || (packs[i].data.v_cell_2_mV < SHUTDOWN_MV)) {
 			LOG_WRN("Batteries are critically low! Pack %u Cell 1:%u mV, Cell 2:%u mV Batt:%u mV", i + 1,
 					packs[i].data.v_cell_1_mV, packs[i].data.v_cell_2_mV, packs[i].data.batt_mV);
@@ -580,7 +620,11 @@ static bool check_for_critically_low_batteries(void)
 
 	LOG_INF("Check for critically low batteries");
 	for (i = 0; i < NUM_PACKS; i++) {
-		if ((rc = max17205_read_batt(packs[i].dev, &vbatt)) != 0 ) {
+		if (!packs[i].enabled) {
+			LOG_DBG("p:%u fuel gauge disabled", i);
+			continue;
+		}
+		if ((rc = max17205_read_batt(packs[i].dev, &vbatt)) != 0) {
 			vbatt = 0;
 		}
 		if ((rc = max17205_read_voltage(packs[i].dev, MAX17205_CHAN_V_CELL_1, &v1)) != 0) {
@@ -650,6 +694,90 @@ static void utilize_pack_hist_data(const struct device *dev, const pack_hist_dat
 	}
 }
 
+#if defined(CONFIG_SETTINGS)
+static uint8_t load_recovery_count(void)
+{
+	int rc;
+	uint8_t recovery_count = 0;
+
+	settings_load();
+
+	rc = settings_load_one("recovery_count", (void *)&recovery_count, sizeof(recovery_count));
+	if (rc < 0) {
+		LOG_ERR("Error loading recovery_count from settings: %d", rc);
+	}
+	if (!recovery_count) {
+		recovery_count = 0;
+	}
+	return recovery_count;
+}
+
+static int store_recovery_count(uint8_t recovery_count)
+{
+	int rc;
+
+	rc = settings_save_one("recovery_count", &recovery_count, sizeof(recovery_count));
+	if (rc < 0) {
+		LOG_ERR("Error saving recovery_count to settings: %d", rc);
+	}
+	return rc;
+}
+#else
+static uint8_t load_recovery_count(void)
+{
+	return 0;
+}
+
+static int store_recovery_count(uint8_t recovery_count)
+{
+	return 0;
+}
+#endif
+
+static int recover_bus(int bus)
+{
+	int err;
+	int retry = 1;
+	int rec_count;
+	const struct device *i2c = (bus == 1) ? DEVICE_DT_GET(DT_NODELABEL(i2c1)) : DEVICE_DT_GET(DT_NODELABEL(i2c2));
+
+	if (!device_is_ready(i2c)) {
+		LOG_ERR("I2C bus %d is not ready", bus);
+		if (bus == 1) {
+			LOG_ERR("Cannot recover i2c%d: I2C device itself is not ready", bus);
+			return -ENODEV;
+		}
+	}
+
+	LOG_WRN("Attempting I2C bus %d recovery", bus);
+	rec_count = load_recovery_count();
+
+	do {
+		err = i2c_recover_bus(i2c);
+		if (err) {
+			LOG_WRN("I2C bus %d is stuck (err: %d); recovery failed; attempt: %d", bus, err, retry++);
+		}
+		k_sleep(K_MSEC(500));
+	} while (err && (retry < MAX_I2C_RECOVERY_RETRIES));
+
+	if (err) {
+		if (rec_count < MAX_RECOVERY_BOOTS)  {
+			store_recovery_count(rec_count + 1); // reset since we're good
+#if defined(CONFIG_SETTINGS)
+			settings_commit();
+#endif
+			k_sleep(K_MSEC(500)); // give settings time to be written to flash
+			__ASSERT(err == 0, "Unable to recover I2C bus %d after %d retries. Rebooting.", bus, retry);
+		} else {
+			LOG_ERR("Cannot recover i2c bus after 10 reboot attempts. Giving up.");
+		}
+	} else if (rec_count) {
+		LOG_INF("Resetting recovery count. Recovery successful");
+		store_recovery_count(0); // reset since we're good
+	}
+	return err;
+}
+
 /* Battery monitoring thread */
 static void handle_batt(void *p1, void *p2, void *p3)
 {
@@ -658,10 +786,33 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	(void)p3;
 	unsigned int i;
 	int rc;
+	int init_step = 0;
+	int rec_count;
 
 	k_thread_name_set(batt_id, "battery_thread");
 	LOG_INF("Starting battery thread");
 
+	rc = general_gpios_init();
+	if (rc) {
+		LOG_ERR("General GPIOs failed to init: %d", rc);
+	}
+
+	k_sleep(K_MSEC(BATTERY_STARTUP_DELAY));
+
+#if defined(CONFIG_SETTINGS)
+	rc = settings_subsys_init();
+	if (rc) {
+		LOG_ERR("settings subsys initialization: fail (err %d)", rc);
+	}
+#endif
+
+	rec_count = load_recovery_count();
+	LOG_INF("  I2C recovery count: %d", rec_count);
+	if (rec_count >= MAX_RECOVERY_BOOTS) {
+		LOG_ERR("Unable to recover i2c bus after 10 resets. Will stop trying.");
+	}
+
+	init_step++;
 	// Ensure value in batt.h matches size of array above
 	__ASSERT((sizeof(pack_hist_data_t) * NUM_PACKS) == HIST_DATA_SIZE, "sizeof(hist_data) must match HIST_DATA_SIZE");
 
@@ -669,42 +820,102 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	packs[1].dev = DEVICE_DT_GET(DT_NODELABEL(pack2));
 	static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
 
+	init_step++;
 	console_init();
 
+	init_step++;
 	if (!device_is_ready(led.port)) {
+		log_panic();  // force logs to go out, even in deferred mode
 		LOG_ERR("LED is not ready.");
 		goto fatal_exit;
 	}
+	init_step++;
 	rc = gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
 	if (rc) {
+		log_panic();
 		LOG_ERR("Error configuring LED output: %d", rc);
 		goto fatal_exit;
 	}
 
+	init_step++;
 	if (!device_is_ready(packs[0].dev)) {
 		LOG_ERR("sensor: device pack1 not ready.");
-		goto fatal_exit;
+		packs[0].enabled = false;
+		recover_bus(1);
+        rc = device_init(packs[0].dev);
+        if (rc == -EALREADY) {
+            LOG_DBG("Device already initialized.");
+        } else if (rc) {
+            LOG_ERR("Error reinitializing the pack1: %d", rc);
+        }
+		if (rc) {
+			LOG_ERR("Error initializing pack1: %d", rc);
+		}
+		if (device_is_ready(packs[0].dev)) {
+			LOG_INF("I2C bus recovery successful.");
+		}
+	} else {
+		packs[0].enabled = true;
+		num_packs_usable++;
 	}
+	init_step++;
 	if (!device_is_ready(packs[1].dev)) {
 		LOG_ERR("sensor: device pack2 not ready.");
-		goto fatal_exit;
+		packs[1].enabled = false;
+		recover_bus(2);
+        rc = device_init(packs[1].dev);
+        if (rc == -EALREADY) {
+            LOG_DBG("Device already initialized.");
+        } else if (rc) {
+            LOG_ERR("Error reinitializing the pack1: %d", rc);
+        }
+		if (rc) {
+			LOG_ERR("Error initializing pack1: %d", rc);
+		}
+		if (device_is_ready(packs[1].dev)) {
+			LOG_INF("I2C bus recovery successful.");
+		}
+	} else {
+		packs[1].enabled = true;
+		num_packs_usable++;
 	}
 
+	init_step++;
 	if ((rc = hist_init()) != 0) {
+		log_panic();
+		LOG_ERR("Could not initialize history.");
 		goto fatal_exit;
 	}
 
-	if ((rc = heaters_init()) != 0) {
-		LOG_ERR("Error initializing heaters: %d", rc);
+	init_step++;
+	if ((rc = pack_gpios_init()) != 0) {
+		log_panic();
+		LOG_ERR("Error initializing pack GPIOs: %d", rc);
 		goto fatal_exit;
 	}
+	if (IS_ENABLED(CONFIG_ENABLE_HEATERS)) {
+		LOG_INF("HEATERS ENABLED IN BUILD");
+	}
+	init_step++;
 	heaters_on(false);
 
+	init_step++;
 	check_for_critically_low_batteries();
 	k_msleep(3000);
 
+	if (rec_count && packs[0].enabled && packs[1].enabled) {
+		if (!store_recovery_count(0)) {
+			LOG_INF("Bus recovery worked. Resetting count.");
+		}
+	}
+
 	for (i = 0; i < NUM_PACKS; i++) {
+		if (!packs[i].enabled) {
+			LOG_WRN(" **** PACK %d DISABLED ****", i + 1);
+			continue;
+		}
 		LOG_INF("**** PACK %d ****", i + 1);
+
 		LOG_INF("Check config registers; update if needed");
 		packs[i].updated = nv_ram_write(packs[i].dev, packs[i].name);
 
@@ -722,12 +933,16 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	k_msleep(500);
 
 	// Retrieve and use most recently stored hist data from flash
-	LOG_INF("Loading most recent capacity history");
 	if (hist_load_current((uint8_t *)hist_data)) {
+		LOG_INF("Loading most recent runtime capacity history");
 		for (i = 0; i < NUM_PACKS; i++) {
-			LOG_DBG("Loading entry to pack %u:", i);
-			utilize_pack_hist_data(packs[i].dev, &hist_data[i]);
+			if (packs[i].enabled) {
+				LOG_INF("Loading runtime history entry to pack %u:", i);
+				utilize_pack_hist_data(packs[i].dev, &hist_data[i]);
+			}
 		}
+	} else {
+		LOG_WRN("No runtime capacity history loaded!");
 	}
 
 	uint32_t loop = 0;
@@ -745,10 +960,16 @@ static void handle_batt(void *p1, void *p2, void *p3)
 			next_hist_update_ms = ms + PACK_HIST_STORE_INTERVAL_MS;
 
 			for (i = 0; i < NUM_PACKS; i++) {
-				populate_pack_hist_data(packs[i].dev, &hist_data[i]);
+				if (packs[i].enabled) {
+					populate_pack_hist_data(packs[i].dev, &hist_data[i]);
+				}
 			}
 			LOG_INF("Storing capacity history");
-			hist_store_current((const uint8_t *)hist_data);
+			if (hist_store_current((const uint8_t *)hist_data)) {
+				LOG_INF("Success");
+			} else {
+				LOG_WRN("Failure");
+			}
 		}
 
 		if (ms >= next_led_update_ms) {
@@ -767,10 +988,11 @@ static void handle_batt(void *p1, void *p2, void *p3)
 
 		LOG_INF("================================= loop %u, %u.%03u s", loop, (uint32_t)(ms / 1000), (uint32_t)(ms % 1000));
 
+		(void)read_die_temp();
 		for (i = 0; i < NUM_PACKS; i++) {
 			LOG_INF("Read %s data; send to CAN", packs[i].name);
 
-			if (populate_pack_data(packs[i].dev, &packs[i].data) ) {
+			if (populate_pack_data(packs[i].dev, &packs[i].data, packs[i].enabled) ) {
 				board_sensors_fill_od();
 				populate_od_pack_data(&packs[i]);
 			} else {
@@ -791,7 +1013,7 @@ static void handle_batt(void *p1, void *p2, void *p3)
 
 fatal_exit:
 	k_msleep(1000);
-	__ASSERT(false, "Fatal error");
+	__ASSERT(false, "Fatal error in step: %d", init_step);
 }
 
 uint32_t batt_event_wait(bool reset, k_timeout_t timeout)

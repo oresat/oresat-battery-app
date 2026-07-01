@@ -136,7 +136,15 @@ static int hist_find_last(void)
 	for (unsigned int i = 0; i < NUM_HIST_ENTRIES; i++) {
 		rc = fcb_getnext(&hist_fcb, &loc);
 		if (rc == -ENOTSUP) {
-			LOG_DBG("End of history.");
+			LOG_INF("End of history at entry %u.", i);
+			rc = 0; // if the flash contains garbage, erase it when there are no entries
+			if (!last_valid_loc.fe_sector) { // no good entries found
+				LOG_WRN("Bad data found in otherwise empty history partition (%u); erasing", i);
+				rc = fcb_clear(&hist_fcb);
+				if (rc) {
+					LOG_ERR("Error erasing history partition");
+				}
+			}
 			break;
 		}
 		else if (rc) {
@@ -165,11 +173,11 @@ static int hist_find_last(void)
 				last_valid_history_entry = data;
 				last_valid_loc = loc;
 			} else {
-				LOG_DBG("Most recent entry found.");
+				LOG_INF("Most recent entry found: %u.", i);
 				break;
 			}
 		} else {
-			LOG_DBG("CRC failure on entry %u", i);
+			LOG_WRN("CRC failure on entry %u", i);
 		}
 	}
 	// We found a good entry, so we can advance the reset cycle count.
@@ -178,10 +186,13 @@ static int hist_find_last(void)
 		hist_entry_print(&last_valid_history_entry, NULL);
 
 		reset_cycle_count = last_valid_history_entry.rst_cycle;
+		LOG_INF("Number of reset cycles: %u", reset_cycle_count);
 
 		// We have started a new cycle, so advance this counter once
 		reset_cycle_count++;
 		return 0;
+	} else {
+		LOG_INF("no good entries found.");
 	}
 	return rc;
 }
@@ -207,6 +218,8 @@ static bool hist_add_next(history_data_t *new_data)
 		if (rc) {
 			LOG_ERR("Error on fcb_rotate(): %d", rc);
 			return false;
+		} else {
+			LOG_DBG("FCB rotated.");
 		}
 		rc = fcb_append(&hist_fcb, sizeof(history_data_t), &last_valid_loc);
 	}
@@ -215,17 +228,23 @@ static bool hist_add_next(history_data_t *new_data)
 	{
 		LOG_ERR("Error on fcb_append(): %d", rc);
 		return false;
+	} else {
+		LOG_DBG("fcb appended.");
 	}
 	rc = fcb_flash_write(&hist_fcb, last_valid_loc.fe_sector, last_valid_loc.fe_data_off,
 						 new_data, last_valid_loc.fe_data_len);
 	if (rc) {
 		LOG_ERR("Error on fcb_flash_write(): %d", rc);
 		ok = false;
+	} else {
+		LOG_DBG("Flash write finished.");
 	}
 	rc = fcb_append_finish(&hist_fcb, &last_valid_loc);
 	if (rc) {
 		LOG_ERR("Error on fcb_append_finish(): %d", rc);
 		ok = false;
+	} else {
+		LOG_DBG("Flash append finished.");
 	}
 
 	// history storage is full or error writing flash, so let caller recover
@@ -307,7 +326,7 @@ bool hist_store_current(const uint8_t hist_data[HIST_DATA_SIZE])
 			LOG_DBG("Done.");
 			ret = true;
 	} else {
-		LOG_DBG("ERROR: Unable to store current history entry.");
+		LOG_INF("ERROR: Unable to store current history entry.");
 	}
 	hist_entry_print(&new_data, prefix);
 	return ret;

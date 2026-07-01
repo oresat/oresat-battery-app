@@ -64,6 +64,7 @@ typedef struct {
 typedef struct pack {
 	bool init;
 	bool updated;
+	bool enabled; // only enabled if can talk to max17205; if false, skip this pack
 	const struct device *dev;
 	batt_pack_data_t data;
 	const struct gpio_dt_spec heater_on;
