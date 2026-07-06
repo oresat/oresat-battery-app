@@ -33,7 +33,7 @@ typedef struct __attribute__((packed)) history_data {
 
 #define HIST_PARTITION PARTITION_ID(hist_partition)
 #define HIST_PARTITION_SIZE PARTITION_SIZE(hist_partition)
-#define HIST_PAGE_SIZE DT_PROP(DT_ALIAS(flash0), erase_block_size)
+#define HIST_PAGE_SIZE DT_PROP(DT_NODELABEL(flash0), erase_block_size)
 #define NUM_HIST_ENTRIES ((HIST_PARTITION_SIZE) / sizeof(history_data_t))
 #define HIST_FCB_NUM_AREAS (HIST_PARTITION_SIZE / HIST_PAGE_SIZE)
 #define HIST_FCB_MAGIC 0xF000BAAA
