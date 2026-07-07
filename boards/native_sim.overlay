@@ -1,0 +1,48 @@
+/ {
+    chosen {
+        zephyr,canbus = &can0;
+        zephyr,flash = &flash0;
+    };
+
+    battpacks: oresat_battery_packs {
+        compatible = "battery-packs";
+        #gpio-cells = <2>;
+        alert-gpios = <&gpiob 5 0>, <&gpiob 12 0>;
+        charge-stat-oc-gpios = <&gpioa 7 0>, <&gpiob 10 0>;
+        discharge-stat-oc-gpios = <&gpioa 1 0>, <&gpiob 11 0>;
+        charge-disable-gpios = <&gpioa 4 GPIO_ACTIVE_HIGH>, <&gpiob 0 GPIO_ACTIVE_HIGH>;
+        discharge-disable-gpios = <&gpioa 5 GPIO_ACTIVE_HIGH>, <&gpiob 1 GPIO_ACTIVE_HIGH>;
+        heater-gpios = <&gpioc 14 GPIO_ACTIVE_HIGH>, <&gpioc 15 GPIO_ACTIVE_HIGH>;
+        moarpwr-gpios = <&gpiob 15 GPIO_ACTIVE_HIGH>;
+        can-shutdown-gpios = <&gpioa 10 GPIO_ACTIVE_HIGH>;
+        can-silent-gpios = <&gpioa 9 GPIO_ACTIVE_HIGH>;
+    };
+
+    can0: can {
+        compatible = "zephyr,native-linux-can";
+        status = "okay";
+        host-interface = "vcan0";
+    };
+
+    gpioa: gpioa {
+        compatible = "zephyr,gpio-emul";
+        gpio-controller;
+        #gpio-cells = <2>;
+        status = "okay";
+    };
+
+    gpiob: gpiob {
+        compatible = "zephyr,gpio-emul";
+        gpio-controller;
+        #gpio-cells = <2>;
+        status = "okay";
+    };
+
+    gpioc: gpioc {
+        compatible = "zephyr,gpio-emul";
+        gpio-controller;
+        #gpio-cells = <2>;
+        status = "okay";
+    };
+};
+
