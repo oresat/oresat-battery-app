@@ -1,3 +1,4 @@
+#ifndef CONFIG_ARCH_POSIX
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
@@ -179,3 +180,4 @@ static void handle_calib(void *p1, void *p2, void *p3)
 }
 
 K_THREAD_DEFINE(calib_id, CALIB_THREAD_STACK_SIZE, handle_calib, NULL, NULL, NULL, CALIB_THREAD_PRIORITY, 0, 0);
+#endif /* ifndef CONFIG_ARCH_POSIX */
