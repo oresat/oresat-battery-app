@@ -121,6 +121,8 @@
 	pinctrl-names = "default";
 	status = "okay";
 	clock-frequency = <I2C_BITRATE_FAST>;
+	scl-gpios =  <&gpiob 6 (GPIO_OPEN_DRAIN | GPIO_PULL_UP)>;
+	sda-gpios = <&gpiob 7 (GPIO_OPEN_DRAIN | GPIO_PULL_UP)>;
 
 	pack1: max17205@36 {
 		compatible = "maxim,max17205";
@@ -145,6 +147,8 @@
 	pinctrl-names = "default";
 	status = "okay";
 	clock-frequency = <I2C_BITRATE_FAST>;
+	scl-gpios = <&gpiob 13 (GPIO_OPEN_DRAIN | GPIO_PULL_UP)>;
+	sda-gpios = <&gpiob 14 (GPIO_OPEN_DRAIN | GPIO_PULL_UP)>;
 
 	pack2: max17205@36 {
 		compatible = "maxim,max17205";
