@@ -29,7 +29,6 @@ static void handle_can(void *p1, void *p2, void *p3)
 {
 	int err;
 	uint16_t timeout;
-	uint16_t wr_timeout_count;
 	uint32_t elapsed = 0U;
 	int64_t timestamp;
 	CO_NMT_reset_cmd_t reset = CO_RESET_NOT;
@@ -62,7 +61,6 @@ static void handle_can(void *p1, void *p2, void *p3)
 	LOG_INF("CANopen stack initialized for node %u", node_id);
 
 	CO_CANsetNormalMode(CO->CANmodule[0]);
-	wr_timeout_count = 0;
 
 	LOG_INF("CAN thread loop start");
 	while (true) {
@@ -70,14 +68,8 @@ static void handle_can(void *p1, void *p2, void *p3)
 		timeout = 1U;
 		timestamp = k_uptime_get();
 
-		if (wr_timeout_count++ >= 1000U) {
-			wr_timeout_count = 0U;
-
-			/* Read inputs */
-			CO_process_RPDO(CO, syncWas);
-
-			/* Write outputs */
-			CO_process_TPDO(CO, syncWas, timeout * 1000U * 1000U);
+		if (CO_isError(CO->em, CO_EM_CAN_TX_OVERFLOW)) {
+			CO_errorReset(CO->em, CO_EM_CAN_TX_OVERFLOW, 111);
 		}
 
 		reset = CO_process(CO, (uint16_t)elapsed, &timeout);
@@ -87,11 +79,18 @@ static void handle_can(void *p1, void *p2, void *p3)
 		}
 
 		if (timeout > 0) {
+			/* Read inputs */
+			CO_process_RPDO(CO, syncWas);
+
+			/* Write outputs */
+			CO_process_TPDO(CO, syncWas, elapsed * 1000U);
+
 			k_sleep(K_MSEC(timeout));
 			elapsed = (uint32_t)k_uptime_delta(&timestamp);
 		} else {
 			elapsed = 0U;
 		}
+
 	}
 
 	CO_delete(&can);
