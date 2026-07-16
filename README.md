@@ -69,9 +69,9 @@ Ensure you are in the `battery` directory (`cd src/oresat/firmware/apps/battery`
 
 | Board         | Build Example                                         |
 | ------------- | ----------------------------------------------------- |
-| oresat_stm32_battery_card | `west build -p always -b oresat_stm32_battery_card/mcxn947/cpu0` |
-| oresat_stm32_battery_card with calibration | `west build -p always -b oresat_stm32_battery_card/mcxn947/cpu0 -- -DEXTRA_CONF_FILE=overlay_calib.conf` |
-| oresat_stm32_battery_card debug and calibration | `west build -p always -b oresat_stm32_battery_card/mcxn947/cpu0 -- -DEXTRA_CONF_FILE=1overlay_calib.conf;overlay_debug.conf` |
+| oresat_stm32_battery_card | `west build -p always -b oresat_stm32_battery_card` |
+| oresat_stm32_battery_card with calibration | `west build -p always -b oresat_stm32_battery_card -- -DEXTRA_CONF_FILE=overlay_calib.conf` |
+| oresat_stm32_battery_card debug and calibration | `west build -p always -b oresat_stm32_battery_card -- -DEXTRA_CONF_FILE='overlay_calib.conf;overlay_debug.conf'` |
 
 > NOTE: the section below only gives general instructions. Specific steps below (like for setting the CAN node id) are self-contained
 >   in the section.
