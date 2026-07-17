@@ -1,4 +1,3 @@
-#ifndef CONFIG_ARCH_POSIX
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/sensor.h>
@@ -332,4 +331,3 @@ bool hist_store_current(const uint8_t hist_data[HIST_DATA_SIZE])
 	hist_entry_print(&new_data, prefix);
 	return ret;
 }
-#endif /* CONFIG_ARCH_POSIX */

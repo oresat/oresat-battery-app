@@ -1,4 +1,3 @@
-#ifndef CONFIG_ARCH_POSIX
 /*
  * Copyright 2021 Matija Tudan
  *
@@ -1065,4 +1064,3 @@ static DEVICE_API(sensor, max17205_battery_driver_api) = {
 					 CONFIG_SENSOR_INIT_PRIORITY, &max17205_battery_driver_api);
 
 DT_INST_FOREACH_STATUS_OKAY(MAX17205_INIT)
-#endif /* ifndef CONFIG_ARCH_POSIX */

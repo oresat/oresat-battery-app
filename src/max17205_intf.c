@@ -1,4 +1,3 @@
-#ifndef CONFIG_ARCH_POSIX
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/sensor.h>
@@ -837,4 +836,3 @@ const char* max17205_reg_to_str(const uint16_t reg) {
 	}
 	return "[reg?]";
 }
-#endif /* ifndef CONFIG_ARCH_POSIX */

@@ -10,20 +10,13 @@
 #include <CO_OD.h>
 #include <oresat.h>
 #include <board_sensors.h>
-#include <zephyr/drivers/sensor.h>
-#include <zephyr/drivers/i2c.h>
 
 #include "batt.h"
-
-#ifndef CONFIG_ARCH_POSIX
 #include "max17205_intf.h"
 #include "hist.h"
-#endif /* ifndef CONFIG_ARCH_POSIX */
 
 #include <sys/param.h>
 #include <string.h>
-
-#include <zephyr/drivers/gpio/gpio_emul.h>
 
 // TODO:
 // - re-review writes to N-version of registers vs. non-N
@@ -114,7 +107,6 @@ static pack_t packs[NUM_PACKS] = {
 	}
 };
 
-#ifndef CONFIG_ARCH_POSIX
 // raw register values to store at runtime per pack;
 // restoring after a reset should result in accurate
 // fuel gauge estimates
@@ -124,7 +116,6 @@ typedef struct __attribute__((packed)) runtime_pack_data {
 } pack_hist_data_t;
 
 static pack_hist_data_t hist_data[NUM_PACKS];
-#endif /* ifndef CONFIG_ARCH_POSIX */
 
 // Failsafe flags -- tolerate hardware failures on everything not essential to controlling heaters
 static unsigned num_packs_usable;
@@ -146,6 +137,7 @@ static int general_gpios_init(void)
 	if (ret) {
 		return ret;
 	}
+
 	ret = gpio_pin_configure_dt(&can_shutdown, GPIO_OUTPUT_INACTIVE);
 	if (ret) {
 		return ret;
@@ -154,6 +146,7 @@ static int general_gpios_init(void)
 	if (ret) {
 		return ret;
 	}
+
 	ret = gpio_pin_configure_dt(&can_silent, GPIO_OUTPUT_INACTIVE);
 	if (ret) {
 		return ret;
@@ -198,21 +191,6 @@ static int pack_gpios_init(void)
 	}
 	return 0;
 }
-
-/*
- * @brief emulate input state for simulated pack gpio inputs
- */
-#ifdef CONFIG_ARCH_POSIX
-static void gpio_inputs_stub()
-{
-	int pack;
-	for (pack = 0; pack < NUM_PACKS; pack++) {
-		gpio_emul_input_set(packs[pack].line_chg_stat.port, packs[pack].line_chg_stat.pin, 1);
-		gpio_emul_input_set(packs[pack].line_dchg_stat.port, packs[pack].line_dchg_stat.pin, 1);
-		gpio_emul_input_set(packs[pack].line_alert.port, packs[pack].line_alert.pin, 1);
-	}
-}
-#endif /* ifdef CONFIG_ARCH_POSIX */
 
 static void heaters_on(bool on)
 {
@@ -389,7 +367,6 @@ static void update_battery_charging_state(const pack_t *pack)
  *
  * @return true on success, false otherwise
  */
-#ifndef CONFIG_ARCH_POSIX
 static bool populate_pack_data(const struct device *dev, batt_pack_data_t *dest, bool enabled)
 {
 	int rc;
@@ -538,52 +515,6 @@ static bool populate_pack_data(const struct device *dev, batt_pack_data_t *dest,
 
 	return dest->is_data_valid;
 }
-#else
-/**
- * @brief Stub pack data for native_sim builds
- */
-static void populate_pack_data_stub(batt_pack_data_t *dest)
-{
-	memset(dest, 0, sizeof(*dest));
-
-	dest->is_data_valid = true;
-
-	dest->batt_mV = 7600;
-	dest->v_cell_1_mV = 7000;
-	dest->v_cell_2_mV = 7000;
-	dest->v_cell_mV = 7000;
-	dest->v_cell_avg_mV = 7000;
-	dest->v_cell_max_volt_mV = 7000;
-	dest->v_cell_min_volt_mV = 7000;
-
-	dest->current_mA = 200;
-	dest->avg_current_mA = 200;
-	dest->max_current_mA = 200;
-	dest->min_current_mA = 200;
-
-	dest->full_capacity_mAh = CELL_CAPACITY_MAH;
-	dest->reported_capacity_mAh = CELL_CAPACITY_MAH * 3 / 4;
-	dest->available_capacity_mAh = CELL_CAPACITY_MAH * 3 / 4;
-	dest->mix_capacity_mAh = CELL_CAPACITY_MAH * 3 / 4;
-
-	dest->time_to_empty_seconds = 3600 * 5;
-	dest->time_to_full_seconds = 0;
-
-	dest->cycles = 12;
-	dest->reported_state_of_charge = 75;
-	dest->available_state_of_charge = 75;
-	dest->present_state_of_charge = 75;
-
-	dest->int_temp_C = 25;
-	dest->avg_int_temp_C = 25;
-	dest->temp_max_C = 27;
-	dest->temp_min_C = 23;
-	dest->temp_1_C = 25;
-	dest->temp_2_C = 25;
-	dest->avg_temp_1_C = 25;
-	dest->avg_temp_2_C = 25;
-}
-#endif /* ifndef CONFIG_ARCH_POSIX */
 
 /**
  * @brief Populates CANOpen data structure values with values from the current battery pack data.
@@ -686,7 +617,6 @@ static bool are_batteries_critically_low(void)
 	return critically_low;
 }
 
-#ifndef CONFIG_ARCH_POSIX
 static bool check_for_critically_low_batteries(void)
 {
 	int rc;
@@ -770,7 +700,6 @@ static void utilize_pack_hist_data(const struct device *dev, const pack_hist_dat
 		LOG_DBG("Leaving AD_REPCAP at default");
 	}
 }
-#endif /* ifndef CONFIG_ARCH_POSIX */
 
 #if defined(CONFIG_SETTINGS)
 static uint8_t load_recovery_count(void)
@@ -817,11 +746,7 @@ static int recover_bus(int bus)
 	int err;
 	int retry = 1;
 	int rec_count;
-#ifndef CONFIG_ARCH_POSIX
 	const struct device *i2c = (bus == 1) ? DEVICE_DT_GET(DT_NODELABEL(i2c1)) : DEVICE_DT_GET(DT_NODELABEL(i2c2));
-#else
-	const struct device *i2c = DEVICE_DT_GET(DT_NODELABEL(i2c0));
-#endif /* ifdef CONFIG_ARCH_POSIX */
 
 	if (!device_is_ready(i2c)) {
 		LOG_ERR("I2C bus %d is not ready", bus);
@@ -887,6 +812,7 @@ static void handle_batt(void *p1, void *p2, void *p3)
 		LOG_ERR("settings subsys initialization: fail (err %d)", rc);
 	}
 #endif
+
 	rec_count = load_recovery_count();
 	LOG_INF("  I2C recovery count: %d", rec_count);
 	if (rec_count >= MAX_RECOVERY_BOOTS) {
@@ -894,25 +820,18 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	}
 
 	init_step++;
-
-#ifndef CONFIG_ARCH_POSIX
 	// Ensure value in batt.h matches size of array above
 	__ASSERT((sizeof(pack_hist_data_t) * NUM_PACKS) == HIST_DATA_SIZE, "sizeof(hist_data) must match HIST_DATA_SIZE");
-#endif /* ifndef CONFIG_ARCH_POSIX */
 
-#ifdef CONFIG_ARCH_POSIX
-	// LOG_INF("stub gpio");
-	// gpio_inputs_stub();
-	// k_msleep(3000);
-#endif /* ifdef CONFIG_ARCH_POSIX */
-
-#ifndef CONFIG_ARCH_POSIX
 	packs[0].dev = DEVICE_DT_GET(DT_NODELABEL(pack1));
 	packs[1].dev = DEVICE_DT_GET(DT_NODELABEL(pack2));
 	static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
 
 	init_step++;
+
+#ifndef CONFIG_ARCH_POSIX
 	console_init();
+#endif /* ifndef CONFIG_ARCH_POSIX */
 
 	init_step++;
 	if (!device_is_ready(led.port)) {
@@ -1035,27 +954,18 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	} else {
 		LOG_WRN("No runtime capacity history loaded!");
 	}
-#else
-	general_gpios_init();
-	pack_gpios_init();
-#endif /* ifndef CONFIG_ARCH_POSIX */
-
 
 	uint32_t loop = 0;
 	int64_t ms = 0;
 	int64_t now = k_uptime_get();
-	int64_t next_data_update_ms = DATA_INTERVAL_MS + now;
-
-#ifndef CONFIG_ARCH_POSIX
 	int64_t next_hist_update_ms = PACK_HIST_STORE_INTERVAL_MS + now;
 	int64_t next_led_update_ms = LED_TOGGLE_INTERVAL_MS + now;
-#endif /* ifndef CONFIG_ARCH_POSIX */
+	int64_t next_data_update_ms = DATA_INTERVAL_MS + now;
 
 	LOG_INF("Entering main battery loop");
 	for (;;) {
 		ms = k_uptime_get();
 
-#ifndef CONFIG_ARCH_POSIX
 		if (ms >= next_hist_update_ms) {
 			next_hist_update_ms = ms + PACK_HIST_STORE_INTERVAL_MS;
 
@@ -1076,7 +986,6 @@ static void handle_batt(void *p1, void *p2, void *p3)
 			next_led_update_ms = ms + LED_TOGGLE_INTERVAL_MS;
 			gpio_pin_toggle_dt(&led);
 		}
-#endif /* ifndef CONFIG_ARCH_POSIX */
 
 		if (ms >= next_data_update_ms) {
 			next_data_update_ms = ms + DATA_INTERVAL_MS;
@@ -1089,7 +998,6 @@ static void handle_batt(void *p1, void *p2, void *p3)
 
 		LOG_INF("================================= loop %u, %u.%03u s", loop, (uint32_t)(ms / 1000), (uint32_t)(ms % 1000));
 
-#ifndef CONFIG_ARCH_POSIX
 		(void)read_die_temp();
 		for (i = 0; i < NUM_PACKS; i++) {
 			LOG_INF("Read %s data; send to CAN", packs[i].name);
@@ -1102,13 +1010,6 @@ static void handle_batt(void *p1, void *p2, void *p3)
 			}
 			update_battery_charging_state(&packs[i]);
 		}
-#else
-		for (i = 0; i < NUM_PACKS; i++) {
-			LOG_INF("Stubbing %s data (native_sim)", packs[i].name);
-			populate_pack_data_stub(&packs[i].data);
-			populate_od_pack_data(&packs[i]);
-		}
-#endif /* ifndef CONFIG_ARCH_POSIX */
 
 		/* Notify any other waiting threads the data is ready */
 		k_event_post(&batt_event, BATT_EVENT_UPDATED);
