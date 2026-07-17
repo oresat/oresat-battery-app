@@ -13,6 +13,14 @@ LOG_MODULE_REGISTER(max17205, CONFIG_SENSOR_LOG_LEVEL);
 
 #include "max17205.h"
 
+#if  !defined(_VAL2FLD) && defined(CONFIG_ARCH_POSIX)
+#define _VAL2FLD(field, value)    (((uint32_t)(value) << field ## _Pos) & field ## _Msk)
+#endif
+
+#if  !defined(_FLD2VAL) && defined(CONFIG_ARCH_POSIX)
+#define _FLD2VAL(field, value)    (((uint32_t)(value) & field ## _Msk) >> field ## _Pos)
+#endif
+
 #define DT_DRV_COMPAT maxim_max17205
 //#define I2C_DEV(cfg, reg) (((reg) > 0x00FFU) ? &((cfg)->i2c_aux) : &((cfg)->i2c))
 #define REG_ADDR(reg) ((reg) & 0x00FFU)
