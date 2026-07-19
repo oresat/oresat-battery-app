@@ -65,6 +65,7 @@ static void handle_can(void *p1, void *p2, void *p3)
 	LOG_INF("CAN thread loop start");
 	while (true) {
 		bool_t syncWas = false;
+
 		timeout = 1U;
 		timestamp = k_uptime_get();
 
@@ -73,7 +74,6 @@ static void handle_can(void *p1, void *p2, void *p3)
 		}
 
 		reset = CO_process(CO, (uint16_t)elapsed, &timeout);
-
 		if (reset != CO_RESET_NOT) {
 			break;
 		}

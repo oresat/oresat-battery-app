@@ -331,3 +331,4 @@ bool hist_store_current(const uint8_t hist_data[HIST_DATA_SIZE])
 	hist_entry_print(&new_data, prefix);
 	return ret;
 }
+

@@ -3,6 +3,7 @@
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/console/console.h>
+
 #include "batt.h"
 #include "calib.h"
 #include "max17205_intf.h"
@@ -840,3 +841,4 @@ const char* max17205_reg_to_str(const uint16_t reg) {
 	}
 	return "[reg?]";
 }
+
