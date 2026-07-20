@@ -8,6 +8,10 @@
 #include "calib.h"
 #include "max17205_intf.h"
 
+#if !defined(_VAL2FLD) && defined(CONFIG_ARCH_POSIX)
+#define _VAL2FLD(field, value)    (((uint32_t)(value) << field ## _Pos) & field ## _Msk)
+#endif
+
 // TODO:
 // - Zephyr console does not have a read timeout; switch to shell
 //   instead of using console_getchar()

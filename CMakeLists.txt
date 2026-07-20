@@ -48,6 +48,7 @@ target_sources(app PRIVATE
   src/max17205_intf.c
   objdict/CO_OD.c
   drivers/sensor/maxim/max17205/max17205.c
+  drivers/sensor/maxim/max17205/max17205_emul.c
 )
 
 zephyr_include_directories(objdict)

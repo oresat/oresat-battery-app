@@ -8,6 +8,7 @@
 #include <CO_OD.h>
 #include <board_sensors.h>
 #include <oresat.h>
+#include <CO_Emergency.h>
 
 #include "batt.h"
 #include "diag.h"
@@ -34,6 +35,10 @@ static void handle_can(void *p1, void *p2, void *p3)
 	struct canopen_context can = {.dev = CAN_INTERFACE};
 	uint8_t node_id = oresat_get_node_id();
 
+	#ifdef CONFIG_ARCH_POSIX
+	node_id = 0x4;
+	#endif /* ifdef CONFIG_ARCH_POSIX */
+
 	k_thread_name_set(can_id, "can_thread");
 	k_sleep(K_MSEC(CAN_SETUP_DELAY));
 
@@ -57,6 +62,7 @@ static void handle_can(void *p1, void *p2, void *p3)
 
 	CO_CANsetNormalMode(CO->CANmodule[0]);
 
+	LOG_INF("CAN thread loop start");
 	while (true) {
 		bool_t syncWas = false;
 
