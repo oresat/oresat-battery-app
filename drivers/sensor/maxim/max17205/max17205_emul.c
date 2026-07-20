@@ -15,12 +15,12 @@ LOG_MODULE_REGISTER(max17205_emul, CONFIG_EMUL_LOG_LEVEL);
 
 #define DT_DRV_COMPAT maxim_max17205
 
-static uint8_t const soc_percent = 75;
-static uint16_t const vbat_mV = 7400;
-static uint8_t const charging = 1;
-static uint16_t const cycles = 12;
-static int16_t const current_val = 100;
-static int16_t const temp_val = (25 * 256);
+static uint8_t const soc_percent_init = 75;
+static uint16_t const vbat_mV_init = 7400;
+static uint8_t const charging_init = 1;
+static uint16_t const cycles_init = 12;
+static int16_t const current_val_init = 100;
+static int16_t const temp_val_init = (25 * 256);
 
 /** Static configuration for the emulator */
 struct max17205_emul_cfg {
@@ -36,28 +36,12 @@ static int emul_max17205_reg_write(const struct emul *target, uint16_t reg,
                                    uint16_t val) {
   struct max17205_emul_data *data = target->data;
 
-  LOG_DBG("0x%03x 0x%04x", reg, val);
+  LOG_DBG("write: 0x%03x 0x%04x", reg, val);
 
   if (reg <= MAX17205_AD_MAXVALUE) {
     data->regs[reg] = val;
-  }
-
-  switch (reg) {
-  case MAX17205_AD_COMMAND:
-    if (val == MAX17205_COMMAND_HARDWARE_RESET) {
-      data->regs[MAX17205_AD_STATUS] |= MAX17205_STATUS_POR;
-    }
-    break;
-  case MAX17205_AD_STATUS:
-    data->regs[MAX17205_AD_STATUS] = val;
-    break;
-  case MAX17205_AD_CONFIG2:
-    if (val & MAX17205_CONFIG2_POR_CMD) {
-      data->regs[MAX17205_AD_STATUS] &= ~MAX17205_STATUS_POR;
-    }
-    break;
-  default:
-    break;
+  } else {
+    LOG_ERR("recieved invalid write address %u", reg);
   }
 
   return 0;
@@ -67,74 +51,7 @@ static int emul_max17205_reg_read(const struct emul *target, uint16_t reg,
                                   uint16_t *val) {
   struct max17205_emul_data *data = target->data;
 
-  switch (reg) {
-  case MAX17205_AD_STATUS:
-    *val = data->regs[MAX17205_AD_STATUS];
-    break;
-  case MAX17205_AD_REPSOC:
-  case MAX17205_AD_VFSOC:
-  case MAX17205_AD_AVSOC:
-    *val = (uint16_t)(((uint32_t)soc_percent * 256U));
-    break;
-  case MAX17205_AD_BATT:
-    *val = (uint16_t)(((uint32_t)vbat_mV * 100U) / 125U);
-    break;
-  case MAX17205_AD_VCELL:
-  case MAX17205_AD_AVGVCELL:
-  case MAX17205_AD_AVGCELL1:
-    *val = (uint16_t)(((uint32_t)(vbat_mV / 2) * 64U) / 5U);
-    break;
-  case MAX17205_AD_CURRENT:
-  case MAX17205_AD_AVGCURRENT:
-    *val = (uint16_t)current_val;
-    break;
-  case MAX17205_AD_CONFIG:
-    *val = 0x3C1CU;
-    break;
-  case MAX17205_AD_CYCLES:
-    *val = cycles;
-    break;
-  case MAX17205_AD_TEMP1:
-  case MAX17205_AD_TEMP2:
-  case MAX17205_AD_INTTEMP:
-  case MAX17205_AD_AVGTEMP1:
-  case MAX17205_AD_AVGTEMP2:
-  case MAX17205_AD_AVGINTTEMP:
-    *val = (uint16_t)(temp_val + (273 * 10));
-    break;
-  case MAX17205_AD_FULLCAPREP:
-  case MAX17205_AD_AVCAP:
-  case MAX17205_AD_MIXCAP:
-  case MAX17205_AD_REPCAP:
-    *val = 1000U;
-    break;
-  case MAX17205_AD_TTE:
-  case MAX17205_AD_TTF:
-    *val = 100U;
-    break;
-  case MAX17205_AD_MAXMINVOLT:
-  case MAX17205_AD_MAXMINCURR:
-  case MAX17205_AD_MAXMINTEMP:
-    *val = data->regs[reg];
-    break;
-  case MAX17205_AD_LEARNCFG:
-    *val = data->regs[reg];
-    break;
-  case MAX17205_AD_FSTAT:
-    *val = charging ? 0 : 0;
-    break;
-  case MAX17205_AD_COMMSTAT:
-    *val = data->regs[reg];
-    break;
-  default:
-    if (reg <= MAX17205_AD_MAXVALUE) {
-      *val = data->regs[reg];
-    } else {
-      LOG_ERR("Unknown register 0x%03x read", reg);
-      return -EIO;
-    }
-    break;
-  }
+  *val = data->regs[reg];
 
   LOG_DBG("read 0x%03x = 0x%04x", reg, *val);
 
@@ -215,7 +132,18 @@ static int emul_max17205_init(const struct emul *target,
 
   memset(data->regs, 0, sizeof(data->regs));
   data->regs[MAX17205_AD_STATUS] = MAX17205_STATUS_POR;
-
+  data->regs[MAX17205_AD_AVSOC] =
+      (uint16_t)(((uint32_t)soc_percent_init * 256U));
+  data->regs[MAX17205_AD_BATT] =
+      (uint16_t)(((uint32_t)vbat_mV_init * 100U) / 125U);
+  data->regs[MAX17205_AD_AVGCELL1] =
+      (uint16_t)(((uint32_t)(vbat_mV_init / 2) * 64U) / 5U);
+  data->regs[MAX17205_AD_AVGCURRENT] = (uint16_t)current_val_init;
+  data->regs[MAX17205_AD_CONFIG] = 0x3C1CU;
+  data->regs[MAX17205_AD_CYCLES] = cycles_init;
+  data->regs[MAX17205_AD_AVGINTTEMP] = (uint16_t)(temp_val_init + (273 * 10));
+  data->regs[MAX17205_AD_REPCAP] = 1000u;
+  data->regs[MAX17205_AD_TTF] = 100u;
   return 0;
 }
 
