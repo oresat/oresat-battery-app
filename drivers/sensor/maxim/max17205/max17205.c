@@ -29,22 +29,26 @@ int max17205_hardware_reset(const struct device *dev);
  * @param valp Place to put the value on success
  * @return 0 if successful, or negative error code from I2C API
  */
-static int max17205_reg_read(const struct device *dev, uint16_t reg_addr, int16_t *valp)
-{
-	const struct max17205_config *cfg = dev->config;
-	struct i2c_dt_spec spec = {.bus = cfg->i2c.bus, .addr = cfg->i2c.addr};
-	int rc;
+static int max17205_reg_read(const struct device *dev, uint16_t reg_addr,
+                             int16_t *valp) {
+  const struct max17205_config *cfg = dev->config;
+  struct i2c_dt_spec spec = {.bus = cfg->i2c.bus, .addr = cfg->i2c.addr};
+  int rc;
 
-	if (reg_addr > 0x00FFU) {
-		spec.addr = cfg->aux_addr;
-	}
+  if (reg_addr > 0x00FFU) {
+    spec.addr = cfg->aux_addr;
+  }
 
-	rc = i2c_burst_read_dt(&spec, REG_ADDR(reg_addr), (uint8_t *)valp, 2);
-	if (rc < 0) {
-		LOG_ERR("Unable to read register 0x%02x: %d", reg_addr, rc);
-		return rc;
-	}
-	return 0;
+#ifndef CONFIG_ARCH_POSIX
+  reg_addr = REG_ADDR(reg_addr);
+#endif /* ifndef CONFIG_ARCH_POSIX */
+
+  rc = i2c_write_read_dt(&spec, &reg_addr, sizeof(reg_addr), valp, sizeof(*valp));
+  if (rc < 0) {
+    LOG_ERR("Unable to read register 0x%02x: %d", reg_addr, rc);
+    return rc;
+  }
+  return 0;
 }
 
 /**
