@@ -1051,8 +1051,8 @@ enum max17205_attribute {
 };
 
 struct max17205_data {
-		/* I2C slave address for secondary register bank */
-		struct i2c_dt_spec i2c_aux;
+	/* I2C slave address for secondary register bank */
+	struct i2c_dt_spec i2c_aux;
 
 	/* Raw register values */
 	int16_t temp_1;			// MAX17205_CHAN_TEMP_1
