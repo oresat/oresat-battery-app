@@ -8,10 +8,6 @@
 #include "calib.h"
 #include "max17205_intf.h"
 
-#if !defined(_VAL2FLD) && defined(CONFIG_ARCH_POSIX)
-#define _VAL2FLD(field, value)    (((uint32_t)(value) << field ## _Pos) & field ## _Msk)
-#endif
-
 // TODO:
 // - Zephyr console does not have a read timeout; switch to shell
 //   instead of using console_getchar()
@@ -23,7 +19,7 @@ LOG_MODULE_REGISTER(max17205_intf, CONFIG_APP_BATTERY_LOG_LEVEL);
   These values were generated using the windows tool from Maxim and while they are probably not totally
   correct yield generally reasonable read back values from the MAX17 chip.
  */
-static const uint16_t PACKCFG = (_VAL2FLD(MAX17205_PACKCFG_NCELLS, NUM_CELLS) |
+static const uint16_t PACKCFG = (FIELD_PREP(MAX17205_PACKCFG_NCELLS_Msk, NUM_CELLS) |
 								 MAX17205_PACKCFG_BALCFG_40 |
 								 MAX17205_PACKCFG_BTEN |
 								 MAX17205_PACKCFG_CHEN |

@@ -13,14 +13,6 @@ LOG_MODULE_REGISTER(max17205, CONFIG_SENSOR_LOG_LEVEL);
 
 #include "max17205.h"
 
-#if  !defined(_VAL2FLD) && defined(CONFIG_ARCH_POSIX)
-#define _VAL2FLD(field, value)    (((uint32_t)(value) << field ## _Pos) & field ## _Msk)
-#endif
-
-#if  !defined(_FLD2VAL) && defined(CONFIG_ARCH_POSIX)
-#define _FLD2VAL(field, value)    (((uint32_t)(value) & field ## _Msk) >> field ## _Pos)
-#endif
-
 #define DT_DRV_COMPAT maxim_max17205
 //#define I2C_DEV(cfg, reg) (((reg) > 0x00FFU) ? &((cfg)->i2c_aux) : &((cfg)->i2c))
 #define REG_ADDR(reg) ((reg) & 0x00FFU)
@@ -300,13 +292,13 @@ static void convert_time(uint16_t raw, struct sensor_value *valp)
 
 static void convert_learn_state(uint16_t raw, struct sensor_value *valp)
 {
-	valp->val1 = _FLD2VAL(MAX17205_LEARNCFG_LS, raw) & 0x0FFFFU;
+	valp->val1 = FIELD_GET(MAX17205_LEARNCFG_LS, raw) & 0x0FFFFU;
 	valp->val2 = 0;
 }
 
 static uint16_t encode_learn_state(uint8_t state)
 {
-	return MAX17205_SETVAL(MAX17205_AD_NLEARNCFG, _VAL2FLD(MAX17205_LEARNCFG_LS, state));
+	return MAX17205_SETVAL(MAX17205_AD_NLEARNCFG, FIELD_PREP(MAX17205_LEARNCFG_LS, state));
 }
 
 /**
@@ -1015,7 +1007,7 @@ static int max17205_init(const struct device *dev)
 		}
 	}
 
-	uint16_t packcfg = _VAL2FLD(MAX17205_PACKCFG_NCELLS, config->num_cells) |
+	uint16_t packcfg = FIELD_PREP(MAX17205_PACKCFG_NCELLS_Msk, config->num_cells) |
 					   bal_val | config->pack_flags;
 
 	LOG_DBG("Writing AD_NPACKCFG = 0x%04x (cell_bal_thresh_voltage = %u, num_cells = %u, flags = 0x%04x)",
