@@ -17,7 +17,7 @@ LOG_MODULE_REGISTER(max17205_emul, CONFIG_EMUL_LOG_LEVEL);
 
 static uint8_t const soc_percent_init = 75;
 static uint16_t const vbat_mV_init = 7400;
-static uint8_t const charging_init = 1;
+// static uint8_t const charging_init = 1;
 static uint16_t const cycles_init = 12;
 static int16_t const current_val_init = 100;
 static int16_t const temp_val_init = (25 * 256);
@@ -89,7 +89,7 @@ static int max17205_emul_transfer_i2c(const struct emul *target,
       LOG_ERR("Unexpected read");
       return -EIO;
     }
-    if (msgs[0].len != 1) {
+    if (msgs[0].len != 2) {
       LOG_ERR("Unexpected msg0 length %d", msgs[0].len);
       return -EIO;
     }
@@ -103,8 +103,9 @@ static int max17205_emul_transfer_i2c(const struct emul *target,
     }
 
     uint16_t val;
+    uint16_t reg_addr = (msgs[0].buf[1] << 8) + (msgs[0].buf[0]);
 
-    ret = emul_max17205_reg_read(target, msgs[0].buf[0], &val);
+    ret = emul_max17205_reg_read(target, reg_addr, &val);
     if (ret) {
       LOG_ERR("emul_max17205_reg_read returned %d", ret);
       return ret;
