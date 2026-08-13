@@ -17,7 +17,6 @@ LOG_MODULE_REGISTER(max17205_emul, CONFIG_EMUL_LOG_LEVEL);
 
 static uint8_t const soc_percent_init = 75;
 static uint16_t const vbat_mV_init = 7400;
-// static uint8_t const charging_init = 1;
 static uint16_t const cycles_init = 12;
 static int16_t const current_val_init = 100;
 static int16_t const temp_val_init = (25 * 256);

@@ -816,7 +816,7 @@ static int max17205_attr_set(const struct device *dev,
 							 enum sensor_attribute attr,
 							 const struct sensor_value *val)
 {
-	struct max17205_config *config = (struct max17205_config *)dev->config;
+	const struct max17205_config *config = dev->config;
 	int16_t raw;
 	int rc = 0;
 
@@ -941,10 +941,7 @@ static int max17205_attr_get(const struct device *dev,
  */
 static int max17205_init(const struct device *dev)
 {
-	/* Kludge below: we are overriding the normally const dev->config so we can
-	 * modify the i2c_aux address to our secondary slave address.
-	 */
-	struct max17205_config *config = (struct max17205_config *)dev->config;
+	const struct max17205_config *config = dev->config;
 	struct max17205_data *data = dev->data;
 	int16_t tmp;
 	int rc;

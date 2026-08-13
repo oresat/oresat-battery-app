@@ -23,6 +23,9 @@ set_property(GLOBAL APPEND
     PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/.git/index")
 
+set(BOARD_FLASH_RUNNER "probe-rs")
+set(BOARD_DEBUG_RUNNER "probe-rs")
+
 #
 # utilize settings to autogenerate a header file to adjust the build inside the C code
 #
@@ -48,7 +51,12 @@ target_sources(app PRIVATE
   src/max17205_intf.c
   objdict/CO_OD.c
   drivers/sensor/maxim/max17205/max17205.c
-  drivers/sensor/maxim/max17205/max17205_emul.c
 )
+
+if(CONFIG_ARCH_POSIX)
+  target_sources(app PRIVATE
+    drivers/sensor/maxim/max17205/max17205_emul.c
+)
+endif()
 
 zephyr_include_directories(objdict)
