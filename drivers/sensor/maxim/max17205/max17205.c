@@ -32,11 +32,12 @@ int max17205_hardware_reset(const struct device *dev);
 static int max17205_reg_read(const struct device *dev, uint16_t reg_addr, int16_t *valp)
 {
 	const struct max17205_config *cfg = dev->config;
+	struct max17205_data *data = dev->data;
 	struct i2c_dt_spec spec = {.bus = cfg->i2c.bus, .addr = cfg->i2c.addr};
 	int rc;
 
 	if (reg_addr > 0x00FFU) {
-		spec.addr = cfg->aux_addr;
+		spec.addr = data->i2c_aux.addr;
 	}
 
 	rc = i2c_burst_read_dt(&spec, REG_ADDR(reg_addr), (uint8_t *)valp, 2);
@@ -61,11 +62,12 @@ static int max17205_reg_write(const struct device *dev, uint16_t reg_addr, int16
 {
 	const struct max17205_config *cfg = dev->config;
 	uint8_t i2c_data[3] = {REG_ADDR(reg_addr), val & 0xFF, (uint16_t)val >> 8};
+	struct max17205_data *data = dev->data;
 	struct i2c_dt_spec spec = {.bus = cfg->i2c.bus, .addr = cfg->i2c.addr};
 	int rc;
 
 	if (reg_addr > 0x00FFU) {
-		spec.addr = cfg->aux_addr;
+		spec.addr = data->i2c_aux.addr;
 	}
 
 	rc = i2c_write_dt(&spec, i2c_data, sizeof(i2c_data));
@@ -290,13 +292,13 @@ static void convert_time(uint16_t raw, struct sensor_value *valp)
 
 static void convert_learn_state(uint16_t raw, struct sensor_value *valp)
 {
-	valp->val1 = _FLD2VAL(MAX17205_LEARNCFG_LS, raw) & 0x0FFFFU;
+	valp->val1 = FIELD_GET(MAX17205_LEARNCFG_LS, raw) & 0x0FFFFU;
 	valp->val2 = 0;
 }
 
 static uint16_t encode_learn_state(uint8_t state)
 {
-	return MAX17205_SETVAL(MAX17205_AD_NLEARNCFG, _VAL2FLD(MAX17205_LEARNCFG_LS, state));
+	return MAX17205_SETVAL(MAX17205_AD_NLEARNCFG, FIELD_PREP(MAX17205_LEARNCFG_LS, state));
 }
 
 /**
@@ -814,7 +816,7 @@ static int max17205_attr_set(const struct device *dev,
 							 enum sensor_attribute attr,
 							 const struct sensor_value *val)
 {
-	struct max17205_config *config = (struct max17205_config *)dev->config;
+	const struct max17205_config *config = dev->config;
 	int16_t raw;
 	int rc = 0;
 
@@ -939,10 +941,8 @@ static int max17205_attr_get(const struct device *dev,
  */
 static int max17205_init(const struct device *dev)
 {
-	/* Kludge below: we are overriding the normally const dev->config so we can
-	 * modify the i2c_aux address to our secondary slave address.
-	 */
-	struct max17205_config *config = (struct max17205_config *)dev->config;
+	const struct max17205_config *config = dev->config;
+	struct max17205_data *data = dev->data;
 	int16_t tmp;
 	int rc;
 
@@ -958,7 +958,8 @@ static int max17205_init(const struct device *dev)
 	/* We later will chose which device to use based on the register address:
 	 * config->i2c or config->i2c_aux.
 	 */
-	config->i2c_aux.addr = config->aux_addr;
+	data->i2c_aux.bus = config->i2c.bus;
+	data->i2c_aux.addr = config->aux_addr;
 
 	/* Read Status register */
 	rc = max17205_reg_read(dev, MAX17205_AD_STATUS, &tmp);
@@ -1003,7 +1004,7 @@ static int max17205_init(const struct device *dev)
 		}
 	}
 
-	uint16_t packcfg = _VAL2FLD(MAX17205_PACKCFG_NCELLS, config->num_cells) |
+	uint16_t packcfg = FIELD_PREP(MAX17205_PACKCFG_NCELLS_Msk, config->num_cells) |
 					   bal_val | config->pack_flags;
 
 	LOG_DBG("Writing AD_NPACKCFG = 0x%04x (cell_bal_thresh_voltage = %u, num_cells = %u, flags = 0x%04x)",
@@ -1050,7 +1051,6 @@ static DEVICE_API(sensor, max17205_battery_driver_api) = {
 																			  \
 	static const struct max17205_config max17205_config_##n = {				  \
 		.i2c = I2C_DT_SPEC_INST_GET(n),										  \
-		.i2c_aux = I2C_DT_SPEC_INST_GET(n), /* Slave addr changed in init */  \
 		.aux_addr = DT_INST_PROP(n, aux_addr),								  \
 		.pack_flags = DT_INST_PROP(n, pack_flags),							  \
 		.num_cells = DT_INST_PROP(n, num_cells),							  \

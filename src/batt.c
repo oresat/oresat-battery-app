@@ -229,7 +229,14 @@ int16_t read_die_temp(void)
 	return (int16_t)die_temp.val1;
 }
 #else
-#error "read_die_temp is not yet supported"
+int16_t read_die_temp(void)
+{
+	struct sensor_value die_temp;
+	die_temp.val1 = 20;
+	LOG_INF("Processor die temperature (stubbed): %d", die_temp.val1);
+
+	return (int16_t)die_temp.val1;
+}
 #endif
 
 /**
@@ -821,7 +828,10 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
 
 	init_step++;
+
+#ifndef CONFIG_ARCH_POSIX
 	console_init();
+#endif /* ifndef CONFIG_ARCH_POSIX */
 
 	init_step++;
 	if (!device_is_ready(led.port)) {

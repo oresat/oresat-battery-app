@@ -86,6 +86,7 @@ $ west flash --erase
 This does a clean build and makes sure the full flash is empty.
 
 ## Building
+
 A simple default build using `west` that forces a complete rebuild:
 ```
 $ west build -p
@@ -107,6 +108,23 @@ Or for more than one Kconfig fragment, do this:
 ```
 $ west build -- -DEXTRA_CONF_FILE='overlay_calib.conf;overlay_debug.conf'
 ```
+
+### Building for Native_sim
+
+It is possible to build this application to run on your local machine with emulated hardware.
+To do so, run
+
+```bash
+  west build -p always -b native_sim
+```
+
+and then
+
+```bash
+  ./build/zephyr/zephyr.exe
+```
+
+Make sure a virtual CAN interface named `vcan0` is running.
 
 ### Flashing
 

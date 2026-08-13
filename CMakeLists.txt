@@ -53,4 +53,10 @@ target_sources(app PRIVATE
   drivers/sensor/maxim/max17205/max17205.c
 )
 
+if(CONFIG_ARCH_POSIX)
+  target_sources(app PRIVATE
+    drivers/sensor/maxim/max17205/max17205_emul.c
+)
+endif()
+
 zephyr_include_directories(objdict)
