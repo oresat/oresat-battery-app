@@ -108,6 +108,23 @@ Or for more than one Kconfig fragment, do this:
 $ west build -- -DEXTRA_CONF_FILE='overlay_calib.conf;overlay_debug.conf'
 ```
 
+### Building for Native_sim
+
+It is possible to build this application to run on your local machine with emulated hardware.
+To do so, run
+
+```bash
+  west build -p always -b native_sim
+```
+
+and then
+
+```bash
+  ./build/zephyr/zephyr.exe
+```
+
+Make sure a virtual CAN interface named `vcan0` is running.
+
 ## Setting the CAN node id
 For the stm32 version of the battery card, follow the process as documented for the
 [ChibiOS version](https://github.com/oresat/oresat-firmware/blob/master/toolchain/flash_node_id.py).
