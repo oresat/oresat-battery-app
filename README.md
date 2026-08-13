@@ -57,7 +57,7 @@ We define two for user convenience:
 - `overlay_debug.conf`: Override Kconfig fragment for building the application with lots of debug logging and ability to use gdb well.
 
 
-# Building and flashing
+# Building
 Ensure you are in the `battery` directory (`cd src/oresat/firmware/apps/battery`) prior to building.
 
 > NOTE:
@@ -81,11 +81,12 @@ Ensure you are in the `battery` directory (`cd src/oresat/firmware/apps/battery`
 For the first build:
 ```
 $ west build -p
-$ west flash --erase -r openocd
+$ west flash --erase
 ```
 This does a clean build and makes sure the full flash is empty.
 
 ## Building
+
 A simple default build using `west` that forces a complete rebuild:
 ```
 $ west build -p
@@ -124,6 +125,18 @@ and then
 ```
 
 Make sure a virtual CAN interface named `vcan0` is running.
+
+### Flashing
+
+Flashing is done via [probe-rs](probe.rs). Follow their [installation instructions](https://probe.rs/docs/getting-started/installation/).
+Once installed, follow their [probe setup instructions](https://probe.rs/docs/getting-started/probe-setup/).
+
+If you have previously installed probe-rs and are on an old version (v<0.32), make sure you follow their uninstalling procedure and use
+their most up-to-date release.
+
+Flash the build using `west flash`.
+
+To fully erase before flashing, do `west flash --erase`
 
 ## Setting the CAN node id
 For the stm32 version of the battery card, follow the process as documented for the
