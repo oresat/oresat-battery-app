@@ -40,12 +40,16 @@ static int max17205_reg_read(const struct device *dev, uint16_t reg_addr, int16_
 		spec.addr = data->i2c_aux.addr;
 	}
 
-	rc = i2c_burst_read_dt(&spec, REG_ADDR(reg_addr), (uint8_t *)valp, 2);
-	if (rc < 0) {
-		LOG_ERR("Unable to read register 0x%02x: %d", reg_addr, rc);
-		return rc;
-	}
-	return 0;
+#ifndef CONFIG_ARCH_POSIX
+  reg_addr = REG_ADDR(reg_addr);
+#endif /* ifndef CONFIG_ARCH_POSIX */
+
+  rc = i2c_write_read_dt(&spec, &reg_addr, sizeof(reg_addr), valp, sizeof(*valp));
+  if (rc < 0) {
+    LOG_ERR("Unable to read register 0x%02x: %d", reg_addr, rc);
+    return rc;
+  }
+  return 0;
 }
 
 /**
