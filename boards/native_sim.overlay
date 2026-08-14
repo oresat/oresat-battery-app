@@ -1,0 +1,101 @@
+/ {
+    chosen {
+        zephyr,canbus = &can0;
+        zephyr,flash = &flash0;
+    };
+
+    battpacks: oresat_battery_packs {
+        compatible = "battery-packs";
+        #gpio-cells = <2>;
+        alert-gpios = <&gpiob 5 0>, <&gpiob 12 0>;
+        charge-stat-oc-gpios = <&gpioa 7 0>, <&gpiob 10 0>;
+        discharge-stat-oc-gpios = <&gpioa 1 0>, <&gpiob 11 0>;
+        charge-disable-gpios = <&gpioa 4 GPIO_ACTIVE_HIGH>, <&gpiob 0 GPIO_ACTIVE_HIGH>;
+        discharge-disable-gpios = <&gpioa 5 GPIO_ACTIVE_HIGH>, <&gpiob 1 GPIO_ACTIVE_HIGH>;
+        heater-gpios = <&gpioc 14 GPIO_ACTIVE_HIGH>, <&gpioc 15 GPIO_ACTIVE_HIGH>;
+        moarpwr-gpios = <&gpiob 15 GPIO_ACTIVE_HIGH>;
+        can-shutdown-gpios = <&gpioa 10 GPIO_ACTIVE_HIGH>;
+        can-silent-gpios = <&gpioa 9 GPIO_ACTIVE_HIGH>;
+    };
+
+    can0: can {
+        compatible = "zephyr,native-linux-can";
+        status = "okay";
+        host-interface = "vcan0";
+    };
+
+    gpioa: gpioa {
+        compatible = "zephyr,gpio-emul";
+        gpio-controller;
+        #gpio-cells = <2>;
+        status = "okay";
+    };
+
+    gpiob: gpiob {
+        compatible = "zephyr,gpio-emul";
+        gpio-controller;
+        #gpio-cells = <2>;
+        status = "okay";
+    };
+
+    gpioc: gpioc {
+        compatible = "zephyr,gpio-emul";
+        gpio-controller;
+        #gpio-cells = <2>;
+        status = "okay";
+    };
+
+    i2c1: i2c@500 {
+        compatible = "zephyr,i2c-emul-controller";
+        status = "okay";
+        clock-frequency = <I2C_BITRATE_FAST>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+        reg = <0x500 4>;
+
+        pack1: max17205@10 {
+            // INFO: the actual i2c addr for the max17205 should be 0x36,
+            // but the emulator doesn't like multiple devices with
+            // the same addr - even on different busses
+            compatible = "maxim,max17205";
+            reg = <0x10>;
+            aux-addr = <0x10>; // actual aux-addr: 0x0b
+            num-cells = <2>;
+            cell-bal-thresh-voltage = <40>;
+            pack-flags = <0x3e00>;
+            rsense-mohms = <10>;
+            config = <0x0211>;
+            status = "okay";
+        };
+    };
+
+    i2c2: i2c@600 {
+        compatible = "zephyr,i2c-emul-controller";
+        status = "okay";
+        clock-frequency = <I2C_BITRATE_FAST>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+        reg = <0x600 4>;
+
+        pack2: max17205@20 {
+            compatible = "maxim,max17205";
+            reg = <0x20>;
+            aux-addr = <0x20>;
+            num-cells = <2>;
+            cell-bal-thresh-voltage = <40>;
+            pack-flags = <0x3e00>;
+            rsense-mohms = <10>;
+            config = <0x0211>;
+            status = "okay";
+        };
+    };
+};
+
+&flash0 {
+    partitions {
+        hist_partition: partition@100000 {
+            label = "hist";
+            reg = <0x00100000 DT_SIZE_K(8)>;
+        };
+    };
+};
