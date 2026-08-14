@@ -16,6 +16,34 @@ LOG_MODULE_REGISTER(max17205_emul, CONFIG_EMUL_LOG_LEVEL);
 #define DT_DRV_COMPAT maxim_max17205
 #define REG_ADDR(reg) ((reg) & 0x00FFU)
 
+#if defined(CONFIG_EMUL_BATT_DEAD) && !defined(CONFIG_EMUL_BATT_OK)
+
+#define EMUL_BATT_SOC_PERCENT 0U
+#define EMUL_BATT_VOLTAGE_MV 3000U
+#define EMUL_BATT_PACK_VOLTAGE_MV 6000U
+#define EMUL_BATT_MAXVOLT_MV 3800U
+#define EMUL_BATT_MINVOLT_MV 3000U
+#define EMUL_BATT_CURRENT_MA 0
+#define EMUL_BATT_TEMP_C 20
+#define EMUL_BATT_CYCLES 50U
+#define EMUL_BATT_CAPACITY_MAH 0U
+#define EMUL_BATT_TTE_S 0U
+
+#else /* default: OK profile */
+
+#define EMUL_BATT_SOC_PERCENT 100U
+#define EMUL_BATT_VOLTAGE_MV 3700U
+#define EMUL_BATT_PACK_VOLTAGE_MV 7400U
+#define EMUL_BATT_MAXVOLT_MV 3800U
+#define EMUL_BATT_MINVOLT_MV 0U
+#define EMUL_BATT_CURRENT_MA 2000
+#define EMUL_BATT_TEMP_C 20
+#define EMUL_BATT_CYCLES 1U
+#define EMUL_BATT_CAPACITY_MAH 1000U
+#define EMUL_BATT_TTE_S 5625U
+
+#endif
+
 static inline uint16_t maH_to_raw(uint16_t rsense_mohms, uint32_t dest_mAh) {
   return (uint16_t)((dest_mAh * rsense_mohms * 1000U) / 5000U);
 }
@@ -188,43 +216,50 @@ static int emul_max17205_init(const struct emul *target,
   data->regs[MAX17205_AD_STATUS] = MAX17205_STATUS_POR;
 
   /* SOC */
-  data->regs[MAX17205_AD_AVSOC] = percentage_to_raw(100);
-  data->regs[MAX17205_AD_VFSOC] = percentage_to_raw(100);
-  data->regs[MAX17205_AD_REPSOC] = percentage_to_raw(100);
+  data->regs[MAX17205_AD_AVSOC] = percentage_to_raw(EMUL_BATT_SOC_PERCENT);
+  data->regs[MAX17205_AD_VFSOC] = percentage_to_raw(EMUL_BATT_SOC_PERCENT);
+  data->regs[MAX17205_AD_REPSOC] = percentage_to_raw(EMUL_BATT_SOC_PERCENT);
 
   /* Voltage */
-  data->regs[MAX17205_AD_BATT] = batt_voltage_to_raw(7400);
-  data->regs[MAX17205_AD_AVGCELL1] = voltage_to_raw(3700);
-  data->regs[MAX17205_AD_AVGCELL2] = voltage_to_raw(3700);
-  data->regs[MAX17205_AD_VCELL] = voltage_to_raw(3700);
-  data->regs[MAX17205_AD_AVGVCELL] = voltage_to_raw(3700);
-  data->regs[MAX17205_AD_MAXMINVOLT] = min_max_voltage_to_raw(0, 3800);
+  data->regs[MAX17205_AD_BATT] = batt_voltage_to_raw(EMUL_BATT_PACK_VOLTAGE_MV);
+  data->regs[MAX17205_AD_AVGCELL1] = voltage_to_raw(EMUL_BATT_VOLTAGE_MV);
+  data->regs[MAX17205_AD_AVGCELL2] = voltage_to_raw(EMUL_BATT_VOLTAGE_MV);
+  data->regs[MAX17205_AD_VCELL] = voltage_to_raw(EMUL_BATT_VOLTAGE_MV);
+  data->regs[MAX17205_AD_AVGVCELL] = voltage_to_raw(EMUL_BATT_VOLTAGE_MV);
+  data->regs[MAX17205_AD_MAXMINVOLT] =
+      min_max_voltage_to_raw(EMUL_BATT_MINVOLT_MV, EMUL_BATT_MAXVOLT_MV);
 
   /* Current */
-  data->regs[MAX17205_AD_CURRENT] = current_to_raw(cfg->rsense_mohms, 2000);
-  data->regs[MAX17205_AD_AVGCURRENT] = current_to_raw(cfg->rsense_mohms, 2000);
+  data->regs[MAX17205_AD_CURRENT] =
+      current_to_raw(cfg->rsense_mohms, EMUL_BATT_CURRENT_MA);
+  data->regs[MAX17205_AD_AVGCURRENT] =
+      current_to_raw(cfg->rsense_mohms, EMUL_BATT_CURRENT_MA);
 
   /* Temperature */
-  data->regs[MAX17205_AD_TEMP1] = avg_temp_to_raw(20);
-  data->regs[MAX17205_AD_TEMP2] = avg_temp_to_raw(20);
-  data->regs[MAX17205_AD_AVGTEMP1] = avg_temp_to_raw(20);
-  data->regs[MAX17205_AD_AVGTEMP2] = avg_temp_to_raw(20);
-  data->regs[MAX17205_AD_AVGINTTEMP] = avg_temp_to_raw(20);
-  data->regs[MAX17205_AD_INTTEMP] = avg_temp_to_raw(20);
+  data->regs[MAX17205_AD_TEMP1] = avg_temp_to_raw(EMUL_BATT_TEMP_C);
+  data->regs[MAX17205_AD_TEMP2] = avg_temp_to_raw(EMUL_BATT_TEMP_C);
+  data->regs[MAX17205_AD_AVGTEMP1] = avg_temp_to_raw(EMUL_BATT_TEMP_C);
+  data->regs[MAX17205_AD_AVGTEMP2] = avg_temp_to_raw(EMUL_BATT_TEMP_C);
+  data->regs[MAX17205_AD_AVGINTTEMP] = avg_temp_to_raw(EMUL_BATT_TEMP_C);
+  data->regs[MAX17205_AD_INTTEMP] = avg_temp_to_raw(EMUL_BATT_TEMP_C);
 
   /* Config */
   data->regs[MAX17205_AD_CONFIG] = 0x3C1CU;
-  data->regs[MAX17205_AD_CYCLES] = cycles_to_raw(1);
+  data->regs[MAX17205_AD_CYCLES] = cycles_to_raw(EMUL_BATT_CYCLES);
 
   /* Capacity */
-  data->regs[MAX17205_AD_REPCAP] = encode_capacity(cfg->rsense_mohms, 1000);
-  data->regs[MAX17205_AD_MIXCAP] = encode_capacity(cfg->rsense_mohms, 1000);
-  data->regs[MAX17205_AD_FULLCAPREP] = encode_capacity(cfg->rsense_mohms, 1000);
-  data->regs[MAX17205_AD_AVCAP] = encode_capacity(cfg->rsense_mohms, 1000);
+  data->regs[MAX17205_AD_REPCAP] =
+      encode_capacity(cfg->rsense_mohms, EMUL_BATT_CAPACITY_MAH);
+  data->regs[MAX17205_AD_MIXCAP] =
+      encode_capacity(cfg->rsense_mohms, EMUL_BATT_CAPACITY_MAH);
+  data->regs[MAX17205_AD_FULLCAPREP] =
+      encode_capacity(cfg->rsense_mohms, EMUL_BATT_CAPACITY_MAH);
+  data->regs[MAX17205_AD_AVCAP] =
+      encode_capacity(cfg->rsense_mohms, EMUL_BATT_CAPACITY_MAH);
 
   /* Time */
   data->regs[MAX17205_AD_TTF] = time_to_raw(0);
-  data->regs[MAX17205_AD_TTE] = time_to_raw(5625);
+  data->regs[MAX17205_AD_TTE] = time_to_raw(EMUL_BATT_TTE_S);
 
   return 0;
 }

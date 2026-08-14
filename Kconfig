@@ -54,6 +54,25 @@ config HIST_STORE_PROMPT
 	  stored capacity history -- useful during calibration and
 	  preflight prep.
 
+choice EMUL_BATT_PROFILE
+	prompt "Emulated battery profile"
+	depends on I2C_EMUL
+	default EMUL_BATT_OK
+
+config EMUL_BATT_OK
+	bool "Set stubbed battery emulator readings to OK profile"
+	help
+	  Set the readings loaded into the emulated MAX17205
+	  registers to values that represent an OK status
+
+config EMUL_BATT_DEAD
+	bool "Set stubbed battery emulator readings to dead profile"
+	help
+	  Set the readings loaded into the emulated MAX17205
+	  registers to values that represent a dead status
+
+endchoice
+
 rsource "drivers/sensor/maxim/max17205/Kconfig"
 
 module = APP_BATTERY
