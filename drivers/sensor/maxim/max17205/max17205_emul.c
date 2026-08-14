@@ -14,6 +14,7 @@
 LOG_MODULE_REGISTER(max17205_emul, CONFIG_EMUL_LOG_LEVEL);
 
 #define DT_DRV_COMPAT maxim_max17205
+#define REG_ADDR(reg) ((reg) & 0x00FFU)
 
 static inline uint16_t maH_to_raw(uint16_t rsense_mohms, uint32_t dest_mAh) {
   return (uint16_t)((dest_mAh * rsense_mohms * 1000U) / 5000U);
@@ -90,6 +91,7 @@ static int emul_max17205_reg_write(const struct emul *target, uint16_t reg,
     data->regs[reg] = val;
   } else {
     LOG_ERR("recieved invalid write address %u", reg);
+    return -EIO;
   }
 
   return 0;
@@ -176,30 +178,63 @@ static const struct i2c_emul_api max17205_emul_api_i2c = {
 static int emul_max17205_init(const struct emul *target,
                               const struct device *parent) {
   struct max17205_emul_data *data = target->data;
+  const struct max17205_emul_cfg *cfg = target->cfg;
 
   ARG_UNUSED(parent);
 
   memset(data->regs, 0, sizeof(data->regs));
+
+  /* Status */
   data->regs[MAX17205_AD_STATUS] = MAX17205_STATUS_POR;
-  data->regs[MAX17205_AD_AVSOC] =
-      (uint16_t)(((uint32_t)soc_percent_init * 256U));
-  data->regs[MAX17205_AD_BATT] =
-      (uint16_t)(((uint32_t)vbat_mV_init * 100U) / 125U);
-  data->regs[MAX17205_AD_AVGCELL1] =
-      (uint16_t)(((uint32_t)(vbat_mV_init / 2) * 64U) / 5U);
-  data->regs[MAX17205_AD_AVGCURRENT] = (uint16_t)current_val_init;
+
+  /* SOC */
+  data->regs[MAX17205_AD_AVSOC] = percentage_to_raw(100);
+  data->regs[MAX17205_AD_VFSOC] = percentage_to_raw(100);
+  data->regs[MAX17205_AD_REPSOC] = percentage_to_raw(100);
+
+  /* Voltage */
+  data->regs[MAX17205_AD_BATT] = batt_voltage_to_raw(7400);
+  data->regs[MAX17205_AD_AVGCELL1] = voltage_to_raw(3700);
+  data->regs[MAX17205_AD_AVGCELL2] = voltage_to_raw(3700);
+  data->regs[MAX17205_AD_VCELL] = voltage_to_raw(3700);
+  data->regs[MAX17205_AD_AVGVCELL] = voltage_to_raw(3700);
+  data->regs[MAX17205_AD_MAXMINVOLT] = min_max_voltage_to_raw(0, 3800);
+
+  /* Current */
+  data->regs[MAX17205_AD_CURRENT] = current_to_raw(cfg->rsense_mohms, 2000);
+  data->regs[MAX17205_AD_AVGCURRENT] = current_to_raw(cfg->rsense_mohms, 2000);
+
+  /* Temperature */
+  data->regs[MAX17205_AD_TEMP1] = avg_temp_to_raw(20);
+  data->regs[MAX17205_AD_TEMP2] = avg_temp_to_raw(20);
+  data->regs[MAX17205_AD_AVGTEMP1] = avg_temp_to_raw(20);
+  data->regs[MAX17205_AD_AVGTEMP2] = avg_temp_to_raw(20);
+  data->regs[MAX17205_AD_AVGINTTEMP] = avg_temp_to_raw(20);
+  data->regs[MAX17205_AD_INTTEMP] = avg_temp_to_raw(20);
+
+  /* Config */
   data->regs[MAX17205_AD_CONFIG] = 0x3C1CU;
-  data->regs[MAX17205_AD_CYCLES] = cycles_init;
-  data->regs[MAX17205_AD_AVGINTTEMP] = (uint16_t)(temp_val_init + (273 * 10));
-  data->regs[MAX17205_AD_REPCAP] = 1000u;
-  data->regs[MAX17205_AD_TTF] = 100u;
+  data->regs[MAX17205_AD_CYCLES] = cycles_to_raw(1);
+
+  /* Capacity */
+  data->regs[MAX17205_AD_REPCAP] = encode_capacity(cfg->rsense_mohms, 1000);
+  data->regs[MAX17205_AD_MIXCAP] = encode_capacity(cfg->rsense_mohms, 1000);
+  data->regs[MAX17205_AD_FULLCAPREP] = encode_capacity(cfg->rsense_mohms, 1000);
+  data->regs[MAX17205_AD_AVCAP] = encode_capacity(cfg->rsense_mohms, 1000);
+
+  /* Time */
+  data->regs[MAX17205_AD_TTF] = time_to_raw(0);
+  data->regs[MAX17205_AD_TTE] = time_to_raw(5625);
+
   return 0;
 }
 
 #define MAX17205_EMUL(n)                                                       \
   static struct max17205_emul_data max17205_emul_data_##n;                     \
   static const struct max17205_emul_cfg max17205_emul_cfg_##n = {              \
-      .addr = DT_INST_REG_ADDR(n)};                                            \
+      .addr = DT_INST_REG_ADDR(n),                                             \
+      .rsense_mohms = DT_INST_PROP(n, rsense_mohms),                           \
+  };                                                                           \
   EMUL_DT_INST_DEFINE(n, emul_max17205_init, &max17205_emul_data_##n,          \
                       &max17205_emul_cfg_##n, &max17205_emul_api_i2c, NULL);
 
