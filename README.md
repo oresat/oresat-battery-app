@@ -126,6 +126,13 @@ and then
 
 Make sure a virtual CAN interface named `vcan0` is running.
 
+By default the battery will report a fully charged state, but you can tell it to mock a dead state.
+To do so, set
+
+```Kconfig
+  CONFIG_EMUL_BATT_DEAD=y
+```
+
 ### Flashing
 
 Flashing is done via [probe-rs](probe.rs). Follow their [installation instructions](https://probe.rs/docs/getting-started/installation/).

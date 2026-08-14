@@ -1121,3 +1121,5 @@ typedef struct {
 } max17205_regval_t;
 
 #endif
+
+uint16_t encode_capacity(uint16_t rsense_mohms, uint32_t dest_mAh);
