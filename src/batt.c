@@ -218,7 +218,7 @@ static const struct device *const dev_die_temp = DEVICE_DT_GET(TEMP_NODE);
 /**
  * @brief Read processor temperature
  */
-int16_t read_die_temp(void)
+static int read_die_temp(int16_t *temp)
 {
 	struct sensor_value die_temp;
 
@@ -226,16 +226,18 @@ int16_t read_die_temp(void)
 	sensor_channel_get(dev_die_temp, SENSOR_CHAN_DIE_TEMP, &die_temp);
 
 	LOG_INF("Processor die temperature: %d", die_temp.val1);
-	return (int16_t)die_temp.val1;
+	*temp = (int16_t)die_temp.val1;
+	return 0;
 }
 #else
-int16_t read_die_temp(void)
+static int read_die_temp(int16_t *temp)
 {
 	struct sensor_value die_temp;
 	die_temp.val1 = 20;
 	LOG_INF("Processor die temperature (stubbed): %d", die_temp.val1);
 
-	return (int16_t)die_temp.val1;
+	*temp = (int16_t)die_temp.val1;
+	return -ENODEV;
 }
 #endif
 
@@ -262,33 +264,61 @@ static void run_battery_heating_state_machine(void)
 	bool warm_enough = false; // Once they’re greater than 5 °C, can turn off heaters
 	bool too_cold = false;    // Once they’re less than -5 °C, can turn on heaters
 
-	if (!num_packs_usable) {
-		int16_t die_temp = read_die_temp();
+	int16_t sum_of_valid_temps =  0;
+	int num_temps = 0;
+	int16_t average_temp;
+	int16_t die_temp;
 
+	if (!num_packs_usable) {
 		total_state_of_charge = 50;
-		full_enough = true; // we don't know so assume we're ok to run the heaters if neede
-		if (die_temp < -5) {
-			too_cold = true;
+		full_enough = true; // we don't know so assume we're ok to run the heaters if needed
+	}
+	if (read_die_temp(&die_temp) >= 0) { // the hardware and driver support reading this
+		if (die_temp < -50) {
+			// bad reading; do nothing
+			LOG_DBG("Bad die_temp %d; ignoring", die_temp);
+		} else {
+			LOG_DBG("Die temp reading %d; good range", die_temp);
+			sum_of_valid_temps += die_temp;
+			num_temps++;
 		}
-		if (die_temp > 5) {
+	}
+	for (i = 0; i < NUM_PACKS; i++) {
+		if (packs[i].enabled) {
+			total_state_of_charge += packs[i].data.present_state_of_charge;
+			if (packs[i].data.avg_temp_1_C < -50) {
+				// bad reading -- do nothing
+				LOG_DBG("Bad pack %i reading %d sensor 1; ignoring", i + 1, packs[i].data.avg_temp_1_C);
+			} else {
+				LOG_DBG("Pack %i reading %d sensor 1; good range", i + 1, packs[i].data.avg_temp_1_C);
+				sum_of_valid_temps += packs[i].data.avg_temp_1_C;
+				num_temps++;
+			}
+			if (packs[i].data.avg_temp_2_C < -50) {
+				// bad reading -- do nothing
+				LOG_DBG("Bad pack %i reading %d sensor 2; ignoring", i + 1, packs[i].data.avg_temp_2_C);
+			} else {
+				LOG_DBG("Pack %i reading %d sensor 2; good range", i + 1, packs[i].data.avg_temp_2_C);
+				sum_of_valid_temps += packs[i].data.avg_temp_2_C;
+				num_temps++;
+			}
+		}
+	}
+
+	if (num_temps) {
+		average_temp = sum_of_valid_temps / num_temps;
+		LOG_INF("Ave temp from %d sensors: %d", num_temps, sum_of_valid_temps);
+
+		if (average_temp < -5) {
+			too_cold = true;
+		} else if (average_temp > 5) {
 			warm_enough = true;
 		}
-	} else {
-		for (i = 0; i < NUM_PACKS; i++) {
-			if (packs[i].enabled) {
-				total_state_of_charge += packs[i].data.present_state_of_charge;
-			}
-			if (packs[i].data.avg_temp_1_C < -5) {
-				too_cold = true;
-			}
-			if (packs[i].data.avg_temp_1_C > 5) {
-				warm_enough = true;
-			}
-		}
-		total_state_of_charge /= num_packs_usable;
-		if (total_state_of_charge > 25) {
-			full_enough = true;
-		}
+	}
+
+	total_state_of_charge /= num_packs_usable;
+	if (total_state_of_charge > 25) {
+		full_enough = true;
 	}
 
 	switch (current_battery_state_machine_state) {
@@ -375,8 +405,12 @@ static bool populate_pack_data(const struct device *dev, batt_pack_data_t *dest,
 	dest->is_data_valid = true;
 
 	if (!enabled) { // hardware failure
-		int16_t die_temp = read_die_temp();
+		int16_t die_temp = 0;
 
+		rc = read_die_temp(&die_temp);
+		if (rc < 0) {
+			LOG_DBG("Die temp is not supported by this hardware / driver");
+		}
 		// data will be all zeros, but populate the temperature as die temp if we can
 		dest->temp_1_C = dest->temp_2_C = die_temp;
 
@@ -961,6 +995,7 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	int64_t next_hist_update_ms = PACK_HIST_STORE_INTERVAL_MS + now;
 	int64_t next_led_update_ms = LED_TOGGLE_INTERVAL_MS + now;
 	int64_t next_data_update_ms = DATA_INTERVAL_MS + now;
+	int16_t die_temp = 0;
 
 	LOG_INF("Entering main battery loop");
 	for (;;) {
@@ -998,7 +1033,7 @@ static void handle_batt(void *p1, void *p2, void *p3)
 
 		LOG_INF("================================= loop %u, %u.%03u s", loop, (uint32_t)(ms / 1000), (uint32_t)(ms % 1000));
 
-		(void)read_die_temp();
+		(void)read_die_temp(&die_temp);
 		for (i = 0; i < NUM_PACKS; i++) {
 			LOG_INF("Read %s data; send to CAN", packs[i].name);
 
