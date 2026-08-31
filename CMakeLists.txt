@@ -5,14 +5,14 @@ set(BOARD "oresat_stm32_battery_card")
 
 set(VERSION_MAJOR "1")
 set(VERSION_MINOR "0")
-set(PATCHLEVEL "0")
+set(PATCHLEVEL "1")
 set(VERSION_TWEAK "0")
 set(EXTRAVERSION "00000000")
 
 find_package(Git QUIET REQUIRED)
 
 execute_process(
-    COMMAND "${GIT_EXECUTABLE}" describe --always HEAD
+    COMMAND "${GIT_EXECUTABLE}" rev-parse --short HEAD
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     RESULT_VARIABLE res
     OUTPUT_VARIABLE EXTRAVERSION
