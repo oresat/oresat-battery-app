@@ -43,6 +43,9 @@ K_EVENT_DEFINE(batt_event);
 #define MAX_I2C_RECOVERY_RETRIES 10
 #define MAX_RECOVERY_BOOTS 10
 
+// define the symbol below to test having good and bad temperature sensors
+//#define TEST_TEMP_SENSOR_HANDLING
+
 // Voltage below which we should stop everything until charging starts
 #define SHUTDOWN_MV 2850
 
@@ -268,12 +271,21 @@ static void run_battery_heating_state_machine(void)
 	int num_temps = 0;
 	int16_t average_temp;
 	int16_t die_temp;
+#if defined(TEST_TEMP_SENSOR_HANDLING)
+	static int test = 0;
+#endif
 
 	if (!num_packs_usable) {
 		total_state_of_charge = 50;
 		full_enough = true; // we don't know so assume we're ok to run the heaters if needed
 	}
 	if (read_die_temp(&die_temp) >= 0) { // the hardware and driver support reading this
+#if defined(TEST_TEMP_SENSOR_HANDLING)
+		if (test == 2) {
+			LOG_WRN("Forcing bad die_temp");
+			die_temp = -51;
+		}
+#endif
 		if (die_temp < -50) {
 			// bad reading; do nothing
 			LOG_DBG("Bad die_temp %d; ignoring", die_temp);
@@ -283,6 +295,36 @@ static void run_battery_heating_state_machine(void)
 			num_temps++;
 		}
 	}
+
+#if defined(TEST_TEMP_SENSOR_HANDLING)
+	if (test == 4) {
+		LOG_WRN("Forcing bad pack 0 temp 1");
+		packs[0].data.avg_temp_1_C = -51;
+	}
+	if (test == 6) {
+		LOG_WRN("Forcing bad pack 0 temp 2");
+		packs[0].data.avg_temp_2_C = -51;
+	}
+	if (test == 8) {
+		LOG_WRN("Forcing bad pack 1 temp 1");
+		packs[1].data.avg_temp_1_C = -51;
+	}
+	if (test == 10) {
+		LOG_WRN("Forcing bad pack 1 temp 2");
+		packs[1].data.avg_temp_2_C = -51;
+	}
+	if (test == 12) {
+		test = 0;
+		packs[0].data.avg_temp_1_C = -51;
+		packs[0].data.avg_temp_2_C = -51;
+		packs[1].data.avg_temp_1_C = -51;
+		packs[1].data.avg_temp_2_C = -51;
+		LOG_WRN("Forcing all pack temps bad");
+	} else {
+		test++;
+	}
+#endif
+
 	for (i = 0; i < NUM_PACKS; i++) {
 		if (packs[i].enabled) {
 			total_state_of_charge += packs[i].data.present_state_of_charge;
@@ -307,7 +349,7 @@ static void run_battery_heating_state_machine(void)
 
 	if (num_temps) {
 		average_temp = sum_of_valid_temps / num_temps;
-		LOG_INF("Ave temp from %d sensors: %d", num_temps, sum_of_valid_temps);
+		LOG_INF("Ave temp from %d sensors: %d", num_temps, average_temp);
 
 		if (average_temp < -5) {
 			too_cold = true;
