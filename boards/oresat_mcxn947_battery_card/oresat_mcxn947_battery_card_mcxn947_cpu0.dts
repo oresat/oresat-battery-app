@@ -1,0 +1,10 @@
+
+/dts-v1/;
+
+#include "oresat_mcxn947_battery_card_mcxn947_cpu0.dtsi"
+#include "oresat_mcxn947_battery_card-pinctrl.dtsi"
+
+/ {
+	model = "NXP MCXN947 battery card";
+	compatible = "nxp,mcxn947", "nxp,mcx";
+};

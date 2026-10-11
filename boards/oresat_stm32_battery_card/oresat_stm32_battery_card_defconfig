@@ -11,3 +11,5 @@ CONFIG_UART_CONSOLE=y
 # GPIO Controller
 CONFIG_GPIO=y
 CONFIG_STM32_TEMP=y
+# Enable special flash controller
+CONFIG_SOC_FLASH_STM32=y
