@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.20.0)
 
 list(APPEND BOARD_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
-set(BOARD "oresat_stm32_battery_card")
+set(BOARD "oresat_mcxn947_battery_card/mcxn947/cpu0")
+#set(BOARD "oresat_stm32_battery_card")
 
 set(VERSION_MAJOR "1")
 set(VERSION_MINOR "1")

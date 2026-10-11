@@ -1,0 +1,6 @@
+board:
+  name: oresat_mcxn947_battery_card
+  full_name: Oresat MCXN947 Battery Card
+  vendor: psas
+  socs:
+    - name: mcxn947
