@@ -13,6 +13,9 @@
 #include <nxp/mcx/nxp_mcxn94x.dtsi>
 #include <zephyr/dt-bindings/i2c/i2c.h>
 #include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/adc/adc.h>
+#include <zephyr/dt-bindings/adc/mcux-lpadc.h>
+#include <zephyr/dt-bindings/gpio/nxp-kinetis-gpio.h>
 
 / {
 	cpus {
@@ -36,6 +39,9 @@
 		watchdog0 = &wwdt0;
 		rtc = &rtc;
    	flash0 = &flash;
+   	i2c1 = &flexcomm0_lpi2c0;
+   	i2c2 = &flexcomm3_lpi2c3;
+		adc0 = &lpadc0;
 	};
 
 	leds {
@@ -51,14 +57,14 @@
 		compatible = "battery-packs";
 		#gpio-cells = <2>;
 		alert-gpios = <&gpio4 0 0>, <&gpio4 6 0>;
-		charge-stat-oc-gpios = <&gpio4 1 0>, <&gpio4 7 0>;
-		discharge-stat-oc-gpios = <&gpio4 2 0>, <&gpio4 12 0>;
+		charge-stat-oc-gpios = <&gpio4 1 0>, <&gpio4 7 0>;  /* Needs pull up */
+		discharge-stat-oc-gpios = <&gpio4 2 0>, <&gpio4 12 0>; /* Needs pull up */
 		charge-disable-gpios = <&gpio4 3 GPIO_ACTIVE_HIGH>, <&gpio4 13 GPIO_ACTIVE_HIGH>;
 		discharge-disable-gpios = <&gpio4 4 GPIO_ACTIVE_HIGH>, <&gpio4 15 GPIO_ACTIVE_HIGH>;
 		heater-gpios = <&gpio4 5 GPIO_ACTIVE_HIGH>, <&gpio4 16 GPIO_ACTIVE_HIGH>;
 		moarpwr-gpios = <&gpio4 17 GPIO_ACTIVE_HIGH>;
-		can-shutdown-gpios = <&gpio1 14 GPIO_ACTIVE_HIGH>;
-		can-silent-gpios = <&gpio1 15 GPIO_ACTIVE_HIGH>;
+		can-fault-gpios = <&gpio1 12 0>;
+		can-silent-gpios = <&gpio1 14 GPIO_ACTIVE_HIGH>;
 	};
 };
 
@@ -133,6 +139,30 @@
 	status = "okay";
 };
 
+&lpadc0 {
+	pinctrl-0 = <&pinmux_lpadc0_0>;
+	pinctrl-names = "default";
+
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	voltage-ref = < 0x0 >;
+   power-level = < 0x01 >;
+
+	lpadc0_0: channel@0 { /* 411_IOUT */
+		reg = <0>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_EXTERNAL0";
+		zephyr,vref-mv = <3300>;
+		zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS,2)>;
+		zephyr,resolution = <12>;
+		zephyr,oversampling = <7>;
+		zephyr,input-positive = <MCUX_LPADC_CH0A>;
+		/delete-property/ zephyr,differential;
+	};
+};
+
 /*
  * Default for this board is to allocate SRAM0-5 to cpu0 but the
  * application can have an application specific device tree to
@@ -174,15 +204,19 @@
 		};
 		slot0_partition: partition@14000 {
 			label = "image-0";
-			reg = <0x00014000 DT_SIZE_K(976)>;
+			reg = <0x00014000 DT_SIZE_K(960)>;
 		};
 		slot1_partition: partition@108000 {
 			label = "image-1";
-			reg = <0x00108000 DT_SIZE_K(976)>;
+			reg = <0x00108000 DT_SIZE_K(960)>;
 		};
 		/* Set 8Kb of storage just before storage_partition defined below */
-		hist_partition: partition@1fc000 {
+		hist_partition: partition@1f8000 {
 			label = "hist";
+			reg = <0x001f8000 DT_SIZE_K(16)>;
+		};
+		storage_partition: partition@1fc000 {
+			label = "storage";
 			reg = <0x001fc000 DT_SIZE_K(16)>;
 		};
 	};
