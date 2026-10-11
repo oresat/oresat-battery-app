@@ -60,4 +60,11 @@
 			input-enable;
 		};
 	};
+
+/* 411_IOUT */
+	pinmux_lpadc0_0: pinmux_lpadc0_0 {
+			pinmux = <ADC1_B6_PIO4_21>;
+			slew-rate = "fast";
+			drive-strength = "low";
+	};
 };

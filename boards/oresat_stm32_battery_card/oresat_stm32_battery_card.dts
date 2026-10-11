@@ -75,6 +75,8 @@
 		volt-sensor0 = &vref;
 		volt-sensor1 = &vbat;
 		flash0 = &flash0;
+		i2c1 = &i2c1;
+		i2c2 = &i2c2;
 	};
 };
 

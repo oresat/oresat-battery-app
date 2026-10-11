@@ -57,6 +57,11 @@ properties:
   can-silent-gpios:
     type: phandle-array
     description: |
-      Single output, active high, to turn of TX (receive only).
+      Single output, active high, to turn off TX (receive only).
+
+  can-fault-gpios:
+    type: phandle-array
+    description: |
+      Single input
 
 include: [base.yaml]

@@ -10,6 +10,10 @@ CONFIG_UART_CONSOLE=y
 
 # GPIO Controller
 CONFIG_GPIO=y
+
+# Read core temperature
 CONFIG_STM32_TEMP=y
+CONFIG_ADC_STM32=y
+
 # Enable special flash controller
 CONFIG_SOC_FLASH_STM32=y

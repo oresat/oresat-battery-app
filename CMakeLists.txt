@@ -54,6 +54,8 @@ target_sources(app PRIVATE
   drivers/sensor/maxim/max17205/max17205.c
 )
 
+target_sources_ifdef(CONFIG_BOARD_ORESAT_MCXN947_BATTERY_CARD app PRIVATE src/adc.c)
+
 if(CONFIG_ARCH_POSIX)
   target_sources(app PRIVATE
     drivers/sensor/maxim/max17205/max17205_emul.c

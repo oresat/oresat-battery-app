@@ -81,7 +81,12 @@ static battery_heating_state_machine_state_t current_battery_state_machine_state
 #define BP_NODE DT_NODELABEL(battpacks)
 
 static const struct gpio_dt_spec moarpwr = GPIO_DT_SPEC_GET(BP_NODE, moarpwr_gpios);
+#if CONFIG_BOARD_ORESAT_MCXN947_BATTERY_CARD
+static const struct gpio_dt_spec can_fault = GPIO_DT_SPEC_GET(BP_NODE, can_fault_gpios);
+#endif
+#if CONFIG_BOARD_ORESAT_STM32_BATTERY_CARD
 static const struct gpio_dt_spec can_shutdown = GPIO_DT_SPEC_GET(BP_NODE, can_shutdown_gpios);
+#endif
 static const struct gpio_dt_spec can_silent = GPIO_DT_SPEC_GET(BP_NODE, can_silent_gpios);
 
 static pack_t packs[NUM_PACKS] = {
@@ -138,6 +143,14 @@ static int general_gpios_init(void)
 		return ret;
 	}
 
+#if CONFIG_BOARD_ORESAT_MCXN947_BATTERY_CARD
+	ret = gpio_pin_configure_dt(&can_fault, GPIO_INPUT);
+	if (ret) {
+		return ret;
+	}
+#endif
+
+#if CONFIG_BOARD_ORESAT_STM32_BATTERY_CARD
 	ret = gpio_pin_configure_dt(&can_shutdown, GPIO_OUTPUT_INACTIVE);
 	if (ret) {
 		return ret;
@@ -146,6 +159,7 @@ static int general_gpios_init(void)
 	if (ret) {
 		return ret;
 	}
+#endif
 
 	ret = gpio_pin_configure_dt(&can_silent, GPIO_OUTPUT_INACTIVE);
 	if (ret) {
@@ -746,7 +760,7 @@ static int recover_bus(int bus)
 	int err;
 	int retry = 1;
 	int rec_count;
-	const struct device *i2c = (bus == 1) ? DEVICE_DT_GET(DT_NODELABEL(i2c1)) : DEVICE_DT_GET(DT_NODELABEL(i2c2));
+	const struct device *i2c = (bus == 1) ? DEVICE_DT_GET(DT_ALIAS(i2c1)) : DEVICE_DT_GET(DT_ALIAS(i2c2));
 
 	if (!device_is_ready(i2c)) {
 		LOG_ERR("I2C bus %d is not ready", bus);
@@ -830,7 +844,7 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	init_step++;
 
 #ifndef CONFIG_ARCH_POSIX
-	console_init();
+	//console_init();
 #endif /* ifndef CONFIG_ARCH_POSIX */
 
 	init_step++;
