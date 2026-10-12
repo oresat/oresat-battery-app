@@ -67,4 +67,19 @@
 			slew-rate = "fast";
 			drive-strength = "low";
 	};
+
+/* Imon, Pack 1 */
+	pinmux_lpadc0_1: pinmux_lpadc0_1 {
+			pinmux = <ADC1_B10_PIO5_2>;
+			slew-rate = "fast";
+			drive-strength = "low";
+	};
+
+/* Imon, Pack 2 */
+	pinmux_lpadc0_2: pinmux_lpadc0_2 {
+			pinmux = <ADC1_B11_PIO5_3>;
+			slew-rate = "fast";
+			drive-strength = "low";
+	};
+
 };

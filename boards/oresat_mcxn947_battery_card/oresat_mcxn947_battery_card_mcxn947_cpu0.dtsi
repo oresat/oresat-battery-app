@@ -156,7 +156,29 @@
 		zephyr,reference = "ADC_REF_EXTERNAL0";
 		zephyr,vref-mv = <3300>;
 		zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS,2)>;
-		zephyr,resolution = <12>;
+		zephyr,resolution = <16>;
+		zephyr,oversampling = <7>;
+		zephyr,input-positive = <MCUX_LPADC_CH0A>;
+		/delete-property/ zephyr,differential;
+	};
+	lpadc0_1: channel@1 { /* Imon Pack 1 */
+		reg = <1>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_EXTERNAL0";
+		zephyr,vref-mv = <3300>;
+		zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS,2)>;
+		zephyr,resolution = <16>;
+		zephyr,oversampling = <7>;
+		zephyr,input-positive = <MCUX_LPADC_CH0A>;
+		/delete-property/ zephyr,differential;
+	};
+	lpadc0_2: channel@2 { /* Imon Pack 2 */
+		reg = <2>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_EXTERNAL0";
+		zephyr,vref-mv = <3300>;
+		zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS,2)>;
+		zephyr,resolution = <16>;
 		zephyr,oversampling = <7>;
 		zephyr,input-positive = <MCUX_LPADC_CH0A>;
 		/delete-property/ zephyr,differential;
