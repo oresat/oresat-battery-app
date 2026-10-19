@@ -1,8 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
 cmake_minimum_required(VERSION 3.20.0)
 
 list(APPEND BOARD_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 set(BOARD "oresat_mcxn947_battery_card/mcxn947/cpu0")
-#set(BOARD "oresat_stm32_battery_card")
 
 set(VERSION_MAJOR "1")
 set(VERSION_MINOR "1")
@@ -54,6 +54,7 @@ target_sources(app PRIVATE
   drivers/sensor/maxim/max17205/max17205.c
 )
 
+target_sources_ifdef(CONFIG_BOARD_ORESAT_MCXN947_BATTERY_CARD app PRIVATE src/can_util.c)
 target_sources_ifdef(CONFIG_BOARD_ORESAT_MCXN947_BATTERY_CARD app PRIVATE src/adc.c)
 
 if(CONFIG_ARCH_POSIX)

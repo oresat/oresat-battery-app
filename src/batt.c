@@ -172,6 +172,33 @@ static int general_gpios_init(void)
 	return ret;
 }
 
+int set_can_silent(void)
+{
+#if CONFIG_BOARD_ORESAT_MCXN947_BATTERY_CARD
+	return gpio_pin_configure_dt(&can_silent, GPIO_OUTPUT_ACTIVE); // drive the pin high
+#else
+	return 0;
+#endif
+}
+
+int set_can_normal(void)
+{
+#if CONFIG_BOARD_ORESAT_MCXN947_BATTERY_CARD
+	return gpio_pin_configure_dt(&can_silent, GPIO_OUTPUT_INACTIVE); // drive the pin low
+#else
+	return 0;
+#endif
+}
+
+bool get_can_fault(void)
+{
+#if CONFIG_BOARD_ORESAT_MCXN947_BATTERY_CARD
+	return gpio_pin_get_dt(&can_fault) != 0; // high == fault
+#else
+	return false;
+#endif
+}
+
 static int pack_gpios_init(void)
 {
 	int ret;

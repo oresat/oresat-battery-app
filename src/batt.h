@@ -105,7 +105,7 @@ typedef struct pack {
  * @return pack_t* - pointer to pack structure if pack is in the
  *  	   range of 0 to (NUM_PACKS - 1), otherwise NULL.
  */
-extern pack_t *get_pack(unsigned int pack);
+pack_t *get_pack(unsigned int pack);
 
 /**
  * Wait for battery data updated event. This can be used by
@@ -120,6 +120,29 @@ extern pack_t *get_pack(unsigned int pack);
  * #return uint32_t - 0 if timed-out, else event value that
  * 				  occurred.
  */
-extern uint32_t batt_event_wait(bool reset, k_timeout_t timeout);
+uint32_t batt_event_wait(bool reset, k_timeout_t timeout);
+
+/**
+ * Query fault output from TCAN337.
+ *
+ * @return bool - true if a fault, false otherwise. False for
+ *  	   STM32 version of the board, since it does not have
+ *  	   the TCAN337.
+ */
+bool get_can_fault(void);
+
+/**
+ * Tell CAN hardware to stop transmitting.
+ *
+ * @return int - negative value on error, 0 otherwise.
+ */
+int set_can_silent(void);
+
+/**
+ * Tell CAN hardware to resume transmitting.
+ *
+ * @return int - negative value on error, 0 otherwise.
+ */
+int set_can_normal(void);
 
 #endif
