@@ -48,6 +48,18 @@ properties:
       Single output to request more power allowance so we can
       enable heaters.
 
+  hw-rev-bit-0-gpios:
+    type: phandle-array
+    description: GPIO input or output.
+
+  hw-rev-bit-1-gpios:
+    type: phandle-array
+    description: GPIO input or output.
+
+  hw-rev-bit-2-gpios:
+    type: phandle-array
+    description: GPIO input or output.
+
   can-shutdown-gpios:
     type: phandle-array
     description: |

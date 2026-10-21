@@ -63,6 +63,9 @@
 		discharge-disable-gpios = <&gpio4 4 GPIO_ACTIVE_HIGH>, <&gpio4 15 GPIO_ACTIVE_HIGH>;
 		heater-gpios = <&gpio4 5 GPIO_ACTIVE_HIGH>, <&gpio4 16 GPIO_ACTIVE_HIGH>;
 		moarpwr-gpios = <&gpio4 17 GPIO_ACTIVE_HIGH>;
+		hw-rev-bit-0-gpios = <&gpio0 21 0>; /* in -- enable pull up in init code */
+		hw-rev-bit-1-gpios = <&gpio0 22 0>; /* in -- enable pull up in init code */
+		hw-rev-bit-2-gpios = <&gpio0 23 0>; /* in -- enable pull up in init code */
 		can-fault-gpios = <&gpio1 12 0>;
 		can-silent-gpios = <&gpio1 14 GPIO_ACTIVE_HIGH>;
 	};
