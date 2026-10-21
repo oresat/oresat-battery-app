@@ -1,6 +1,6 @@
 # oresat-app-battery
 
-This repository contains the Oresat Zephyr app for the battery card for Oresat v1.0.
+This repository contains the Oresat Zephyr app for the battery card for Oresat v1.1.
 
 ## Summary
 This application monitors and reports over CAN the telemetry related to the two dual cell battery packs on the battery card.
@@ -30,7 +30,6 @@ fragment specific for launch.
 
 ### Kconfig symbols
 - `CONFIG_APP_BATTERY_LOG_LEVEL_INF`: The final suffix defines the default level for application logging. Set the value to `n` to disable logging.
-- `CONFIG_ACCESS_FLASH_STM32`: A non-user-configurable setting used to enable STM32 HAL subsystems we need if building for an STM32 board.
 - `CONFIG_VERBOSE_DEBUG`: Enables dumping of capacity history, its location in flash, and all the non-volatile MAX17205 registers.
 - `CONFIG_ENABLE_NV_MEMORY_UPDATE_CODE`: Enables storing of a subset of volatile MAX17205 registers to MAX17205 non-volatile registers; limited to 7 writes over IC lifetime.
 - `CONFIG_ENABLE_LEARN_COMPLETE`: Enables detection of reaching the final calibration stage.
@@ -55,37 +54,39 @@ Kconfig fragments are used to define a set of Kconfig value changes that overrid
 We define two for user convenience:
 - `overlay_calib.conf`: Override Kconfig fragment for building the application with calibration enabled (used prior to launch).
 - `overlay_debug.conf`: Override Kconfig fragment for building the application with lots of debug logging and ability to use gdb well.
-
+- `overlay_shell.conf`: Override Kconfig fragment for building the application with interactive terminal input and output. Used to set the CAN node id on the mcxn947 battery card.
 
 # Building
 Ensure you are in the `battery` directory (`cd src/oresat/firmware/apps/battery`) prior to building.
 
 > NOTE:
->   The `oresat_stm32_battery_card` is the default. It normally does not need to be specified as shown below,
->   except for the important exception of enabling MCUboot. In that case, it is mandatory for Zephyr 4.2.0.
+>   The `oresat_mcxn947_battery_card` is now the default.
 
 > NOTE:
 >   The stm32 version of the battery card does not have MCUboot support.
 
 | Board         | Build Example                                         |
 | ------------- | ----------------------------------------------------- |
+| oresat_mcxn947_battery_card | `west build -p always -- -DCONFIG_MCUBOOT_ALLOWED=n` |
+| mcxn947_battery_card with shell | `west build -p always -- -DEXTRA_CONF_FILE=overlay_shell.conf -DCONFIG_MCUBOOT_ALLOWED=n` |
+| mcxn947_battery_card with MCUboot | `west build -p always --sysbuild` |
+| |
 | oresat_stm32_battery_card | `west build -p always -b oresat_stm32_battery_card` |
 | oresat_stm32_battery_card with calibration | `west build -p always -b oresat_stm32_battery_card -- -DEXTRA_CONF_FILE=overlay_calib.conf` |
 | oresat_stm32_battery_card debug and calibration | `west build -p always -b oresat_stm32_battery_card -- -DEXTRA_CONF_FILE='overlay_calib.conf;overlay_debug.conf'` |
+| |
+| native simulation of battery card | `west build -p always -b native_sim -- -DCONFIG_MCUBOOT_ALLOWED=n` |
+
 
 > NOTE: the section below only gives general instructions. Specific steps below (like for setting the CAN node id) are self-contained
 >   in the section.
 
-## First build
+## Building (General Guide)
 
-For the first build:
-```
-$ west build -p
-$ west flash --erase
-```
-This does a clean build and makes sure the full flash is empty.
+When your intent is to flash and run the firmware, use the appropriate example above.
 
-## Building
+> NOTE: The guide below is only meant to describe the concepts -- it is not
+> intended to tell you what to do specifically for a working battery card.
 
 A simple default build using `west` that forces a complete rebuild:
 ```
@@ -115,7 +116,7 @@ It is possible to build this application to run on your local machine with emula
 To do so, run
 
 ```bash
-  west build -p always -b native_sim
+  west build -p always -b native_sim -- -DCONFIG_MCUBOOT_ALLOWED=n
 ```
 
 and then
@@ -146,8 +147,54 @@ Flash the build using `west flash`.
 To fully erase before flashing, do `west flash --erase`
 
 ## Setting the CAN node id
+This **must be set** to the correct number expected by the C3 card. Use `oresat-configs cards` to check which number to use.
+
 For the stm32 version of the battery card, follow the process as documented for the
 [ChibiOS version](https://github.com/oresat/oresat-firmware/blob/master/toolchain/flash_node_id.py).
+
+For the mcxn947 version of the battery card, set the CAN node id through a terminal with the Zephyr shell enabled.
+
+This requires three steps in practice:
+1. Build and flash with the `overlay_shell.conf` configuration file applied
+1. Enter the CAN node id in the terminal
+1. Build and flash again without the `overlay_shell.conf` without erasing the chip
+
+## Enabling the shell
+Do a build with the `overlay_shell.conf` file as a parameter to `west build`:
+```
+$ west build -- -DEXTRA_CONF_FILE=overlay_shell.conf -DCONFIG_MCUBOOT_ALLOWED=n
+```
+Flash as explained earlier.
+
+## Using the shell
+The terminal will continue to show whatever log messages are currently enabled.
+But it will also show, at the bottom of the scroll, a prompt:
+```
+uart:~$
+```
+Commands:
+- `help` for help. There are many commands included by Zephyr itself not listed below.
+
+- `nodeid`<enter> to see the current nodeid.
+  Change the node id by entering `nodeid <N>` where N is the desired node id in decimal.
+  The value is then stored in the settings partition, so as long as you do not do a full chip erase,
+  it will be remembered.
+
+## Rebuilding to remove shell
+Build again, using whatever options you need as explained in the document.
+
+> NOTE: do not use the `--erase` parameter with `west flash` or you will lose the change you
+> just made with the shell.
+
+# Building and flashing with bootloader
+```
+$ west build -p --sysbuild
+$ west flash
+```
+This will build two binaries: one for the bootloader, and one for the application.
+The flashing step will be done automatically in two parts to flash these two binaries.
+
+> NOTE: The app flashing step will run slowly: this is normal.
 
 # Shortcomings of original Oresat battery app
 - original code was not using all register values from the Maxim Wizard software with no explanation as to why

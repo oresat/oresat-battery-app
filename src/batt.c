@@ -8,6 +8,8 @@
 #include <zephyr/drivers/gpio.h>
 #include <canopennode.h>
 #include <CO_OD.h>
+#include <version.h>
+#include <app_version.h>
 #include <oresat.h>
 #include <board_sensors.h>
 
@@ -83,6 +85,9 @@ static battery_heating_state_machine_state_t current_battery_state_machine_state
 static const struct gpio_dt_spec moarpwr = GPIO_DT_SPEC_GET(BP_NODE, moarpwr_gpios);
 #if CONFIG_BOARD_ORESAT_MCXN947_BATTERY_CARD
 static const struct gpio_dt_spec can_fault = GPIO_DT_SPEC_GET(BP_NODE, can_fault_gpios);
+const struct gpio_dt_spec hw_rev_bit_0 = GPIO_DT_SPEC_GET(BP_NODE, hw_rev_bit_0_gpios);
+const struct gpio_dt_spec hw_rev_bit_1 = GPIO_DT_SPEC_GET(BP_NODE, hw_rev_bit_1_gpios);
+const struct gpio_dt_spec hw_rev_bit_2 = GPIO_DT_SPEC_GET(BP_NODE, hw_rev_bit_2_gpios);
 #endif
 #if CONFIG_BOARD_ORESAT_STM32_BATTERY_CARD
 static const struct gpio_dt_spec can_shutdown = GPIO_DT_SPEC_GET(BP_NODE, can_shutdown_gpios);
@@ -125,6 +130,10 @@ static pack_hist_data_t hist_data[NUM_PACKS];
 // Failsafe flags -- tolerate hardware failures on everything not essential to controlling heaters
 static unsigned num_packs_usable;
 
+#if CONFIG_BOARD_ORESAT_MCXN947_BATTERY_CARD
+static unsigned raw_board_rev;
+#endif
+
 pack_t *get_pack(unsigned int pack)
 {
 	if (pack < NUM_PACKS) {
@@ -134,42 +143,81 @@ pack_t *get_pack(unsigned int pack)
 	}
 }
 
+char *get_board_version(void)
+{
+#if CONFIG_BOARD_ORESAT_MCXN947_BATTERY_CARD
+
+	static char ver[6] = "4.0.0";
+	ver[2] = '0' + raw_board_rev; // Use the hw rev bits to set the minor release to a value from '0' to '7'.
+
+#elif CONFIG_BOARD_ORESAT_STM32_BATTERY_CARD
+
+	static char ver[6] = "3.0.0"; // We did not implement version GPIOs, so this is just a guess.
+
+#endif
+
+	return ver;
+}
+
 static int general_gpios_init(void)
 {
 	int ret;
+	int err = 0;
 
 	ret = gpio_pin_configure_dt(&moarpwr, GPIO_OUTPUT_INACTIVE);
 	if (ret) {
-		return ret;
+		err = ret;
 	}
 
 #if CONFIG_BOARD_ORESAT_MCXN947_BATTERY_CARD
+
 	ret = gpio_pin_configure_dt(&can_fault, GPIO_INPUT);
 	if (ret) {
-		return ret;
+		err = ret;
 	}
+	ret = gpio_pin_configure_dt(&hw_rev_bit_0, GPIO_INPUT | GPIO_PULL_UP);
+	if (ret) {
+		LOG_ERR("Could not configure hw_rev_bit_0 as input with pull up: %d", ret);
+		err = ret;
+	}
+	ret = gpio_pin_configure_dt(&hw_rev_bit_1, GPIO_INPUT | GPIO_PULL_UP);
+	if (ret) {
+		LOG_ERR("Could not configure hw_rev_bit_1 as input with pull up: %d", ret);
+		err = ret;
+	}
+	ret = gpio_pin_configure_dt(&hw_rev_bit_2, GPIO_INPUT | GPIO_PULL_UP);
+	if (ret) {
+		LOG_ERR("Could not configure hw_rev_bit_2 as input with pull up: %d", ret);
+		err = ret;
+	}
+
+	raw_board_rev = gpio_pin_get_dt(&hw_rev_bit_0) << 0 |
+				gpio_pin_get_dt(&hw_rev_bit_1) << 1 |
+				gpio_pin_get_dt(&hw_rev_bit_2) << 2;
 #endif
 
 #if CONFIG_BOARD_ORESAT_STM32_BATTERY_CARD
 	ret = gpio_pin_configure_dt(&can_shutdown, GPIO_OUTPUT_INACTIVE);
 	if (ret) {
-		return ret;
+		err = ret;
 	}
 	ret = gpio_pin_set_dt(&can_shutdown, false); // set true to shutdown can
 	if (ret) {
-		return ret;
+		err = ret;
 	}
 #endif
 
+	LOG_INF("Board Rev %s", get_board_version());
+
 	ret = gpio_pin_configure_dt(&can_silent, GPIO_OUTPUT_INACTIVE);
 	if (ret) {
-		return ret;
+		err = ret;
 	}
 	ret = gpio_pin_set_dt(&can_silent, false); // set true to silence can
 	if (ret) {
-		return ret;
+		err = ret;
 	}
-	return ret;
+	return err;
 }
 
 int set_can_silent(void)
@@ -557,6 +605,21 @@ static bool populate_pack_data(const struct device *dev, batt_pack_data_t *dest,
 	return dest->is_data_valid;
 }
 
+static void populate_od_versions(void)
+{
+	size_t hw_ver_size = sizeof(CO_OD_RAM.versions.hw_version);
+	size_t fw_ver_size = sizeof(CO_OD_RAM.versions.fw_version);
+
+	CO_LOCK_OD();
+
+	// The CAN stack does not need arrays of characters to be NULL terminated, so use memcpy
+	// instead of strncpy or strcat.
+	memcpy(CO_OD_RAM.versions.hw_version, get_board_version(), hw_ver_size);
+	memcpy(CO_OD_RAM.versions.fw_version, APP_VERSION_STRING, fw_ver_size);
+
+	CO_UNLOCK_OD();
+}
+
 /**
  * @brief Populates CANOpen data structure values with values from the current battery pack data.
  *
@@ -846,6 +909,8 @@ static void handle_batt(void *p1, void *p2, void *p3)
 	}
 
 	k_sleep(K_MSEC(BATTERY_STARTUP_DELAY));
+
+	populate_od_versions();
 
 #if defined(CONFIG_SETTINGS)
 	rc = settings_subsys_init();

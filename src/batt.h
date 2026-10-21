@@ -97,6 +97,10 @@ typedef struct pack {
 
 #define BATT_EVENT_UPDATED 0x0001
 
+typedef enum {
+	HW_REV_4_0_0 = 0,	// board revision 4.0.0
+} board_hw_rev_t;
+
 /**
  * Get access to pack_t structure for specified pack number.
  *
