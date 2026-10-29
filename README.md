@@ -196,6 +196,43 @@ The flashing step will be done automatically in two parts to flash these two bin
 
 > NOTE: The app flashing step will run slowly: this is normal.
 
+## CAN flashing script
+The `flash_canopen.py` script can be used to test flashing over CAN on the desktop.
+
+```
+    $python3 flash_canopen.py --help
+usage: flash_canopen.py [-h] [--serial-port SERIAL_PORT] [--channel CHANNEL] [--bitrate BITRATE] [--node-id NODE_ID] [--bin BIN_PATH] [--block-transfer] [--download-buffer-size DOWNLOAD_BUFFER_SIZE]
+                        [--status-timeout STATUS_TIMEOUT] [--bootup-timeout BOOTUP_TIMEOUT] [--sdo-timeout SDO_TIMEOUT] [--sdo-retries SDO_RETRIES] [--confirm] [--no-confirm] [--request-crc]
+                        [--throttle-delay THROTTLE_DELAY] [--debug]
+
+options:
+  -h, --help            show this help message and exit
+  --serial-port SERIAL_PORT
+  --channel CHANNEL
+  --bitrate BITRATE
+  --node-id NODE_ID
+  --bin BIN_PATH
+  --block-transfer
+  --download-buffer-size DOWNLOAD_BUFFER_SIZE
+  --status-timeout STATUS_TIMEOUT
+  --bootup-timeout BOOTUP_TIMEOUT
+  --sdo-timeout SDO_TIMEOUT
+  --sdo-retries SDO_RETRIES
+  --confirm
+  --no-confirm
+  --request-crc
+  --throttle-delay THROTTLE_DELAY
+  --debug               Enable verbose CAN logging
+```
+
+This example flashes the battery app firmware to a CANable adapter on ttyACM1, where the battery card is set to the CAN id of 4.
+```
+$ python3 flash_canopen.py --serial-port /dev/ttyACM1 --bin  build/battery/zephyr/zephyr.signed.bin --node-id 4
+```
+
+> NOTE: The CAN id must be changed to the proper one for this card before the
+>  C3 can access it, either for collecting data reports from this card, or deploying firmware updates to this card.
+
 # Shortcomings of original Oresat battery app
 - original code was not using all register values from the Maxim Wizard software with no explanation as to why
 - no learning cycles performed -- full charge/discharge never done to tune the fuel guage prior to launch

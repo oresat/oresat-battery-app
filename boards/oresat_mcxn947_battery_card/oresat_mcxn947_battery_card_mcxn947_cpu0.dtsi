@@ -22,6 +22,8 @@
 		/delete-node/ cpu@1;
 	};
 
+	oresat_demo: oresat-demo-enabled {}; /* Enable demos for supported boards */
+
 	chosen {
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash;

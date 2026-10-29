@@ -79,11 +79,11 @@ static void handle_can(void *p1, void *p2, void *p3)
 			LOG_WRN("--> Use shell command to set (type help).");
 #else
 			LOG_WRN("--> Firmware not built with CONFIG_SHELL=y. Rebuild and flash to update CAN node id.");
-#endif
 			if (IS_ENABLED(CONFIG_CAN_ID_MUST_BE_SET)) {
 				LOG_ERR("Halting.");
 				goto fatal_error;
 			}
+#endif
 		}
 	}
 #endif
