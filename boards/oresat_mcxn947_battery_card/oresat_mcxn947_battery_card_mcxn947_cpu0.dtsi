@@ -40,16 +40,16 @@
 		led0 = &red_led;
 		watchdog0 = &wwdt0;
 		rtc = &rtc;
-   	flash0 = &flash;
-   	i2c1 = &flexcomm0_lpi2c0;
-   	i2c2 = &flexcomm3_lpi2c3;
+		flash0 = &flash;
+		i2c1 = &flexcomm0_lpi2c0;
+		i2c2 = &flexcomm3_lpi2c3;
 		adc0 = &lpadc0;
 	};
 
 	leds {
 		compatible = "gpio-leds";
 		red_led: led_1 {
-			gpios = <&gpio1 13 GPIO_ACTIVE_LOW>;
+			gpios = <&gpio1 13 GPIO_ACTIVE_HIGH>;
 			label = "Red LED";
 			status = "okay";
 		};
@@ -59,8 +59,9 @@
 		compatible = "battery-packs";
 		#gpio-cells = <2>;
 		alert-gpios = <&gpio4 0 0>, <&gpio4 6 0>;
-		charge-stat-oc-gpios = <&gpio4 1 0>, <&gpio4 7 0>;  /* Needs pull up */
-		discharge-stat-oc-gpios = <&gpio4 2 0>, <&gpio4 12 0>; /* Needs pull up */
+		efuse-pg-oc-gpios = <&gpio4 19 0>, <&gpio4 20 0>; /* present only on 4.1+ */
+		charge-stat-oc-gpios = <&gpio4 1 0>, <&gpio4 7 0>; /* Needs pull up rev 4.0, not 4.1+ */
+		discharge-stat-oc-gpios = <&gpio4 2 0>, <&gpio4 12 0>; /* Needs pull up rev 4.0, not 4.1+ */
 		charge-disable-gpios = <&gpio4 3 GPIO_ACTIVE_HIGH>, <&gpio4 13 GPIO_ACTIVE_HIGH>;
 		discharge-disable-gpios = <&gpio4 4 GPIO_ACTIVE_HIGH>, <&gpio4 15 GPIO_ACTIVE_HIGH>;
 		heater-gpios = <&gpio4 5 GPIO_ACTIVE_HIGH>, <&gpio4 16 GPIO_ACTIVE_HIGH>;
@@ -68,7 +69,7 @@
 		hw-rev-bit-0-gpios = <&gpio0 21 0>; /* in -- enable pull up in init code */
 		hw-rev-bit-1-gpios = <&gpio0 22 0>; /* in -- enable pull up in init code */
 		hw-rev-bit-2-gpios = <&gpio0 23 0>; /* in -- enable pull up in init code */
-		can-fault-gpios = <&gpio1 12 0>;
+		can-fault-gpios = <&gpio1 12 0>; /* Needs pull up */
 		can-silent-gpios = <&gpio1 14 GPIO_ACTIVE_HIGH>;
 	};
 };
@@ -153,7 +154,7 @@
 	status = "okay";
 
 	voltage-ref = < 0x0 >;
-   power-level = < 0x01 >;
+	power-level = < 0x01 >;
 
 	lpadc0_0: channel@0 { /* 411_IOUT */
 		reg = <0>;
@@ -163,7 +164,7 @@
 		zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS,2)>;
 		zephyr,resolution = <16>;
 		zephyr,oversampling = <7>;
-		zephyr,input-positive = <MCUX_LPADC_CH0A>;
+		zephyr,input-positive = <MCUX_LPADC_CH6B>;
 		/delete-property/ zephyr,differential;
 	};
 	lpadc0_1: channel@1 { /* Imon Pack 1 */
@@ -174,7 +175,7 @@
 		zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS,2)>;
 		zephyr,resolution = <16>;
 		zephyr,oversampling = <7>;
-		zephyr,input-positive = <MCUX_LPADC_CH0A>;
+		zephyr,input-positive = <MCUX_LPADC_CH10B>;
 		/delete-property/ zephyr,differential;
 	};
 	lpadc0_2: channel@2 { /* Imon Pack 2 */
@@ -185,7 +186,7 @@
 		zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS,2)>;
 		zephyr,resolution = <16>;
 		zephyr,oversampling = <7>;
-		zephyr,input-positive = <MCUX_LPADC_CH0A>;
+		zephyr,input-positive = <MCUX_LPADC_CH11B>;
 		/delete-property/ zephyr,differential;
 	};
 };

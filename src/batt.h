@@ -73,6 +73,7 @@ typedef struct pack {
 	const struct gpio_dt_spec line_dchg_stat;
 	const struct gpio_dt_spec line_chg_stat;
 	const struct gpio_dt_spec line_alert;
+	const struct gpio_dt_spec efuse_pg_stat;
 	uint8_t pack_number;
 	char *name;
 } pack_t;

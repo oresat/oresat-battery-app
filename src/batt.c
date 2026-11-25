@@ -16,6 +16,7 @@
 #include "batt.h"
 #include "max17205_intf.h"
 #include "hist.h"
+#include "adc.h"
 
 #include <sys/param.h>
 #include <string.h>
@@ -72,7 +73,9 @@ typedef enum {
 	STATUS_BIT_DCHG_DIS,
 	STATUS_BIT_CHG_DIS,
 	STATUS_BIT_DCHG_STAT,
-	STATUS_BIT_CHG_STAT
+	STATUS_BIT_CHG_STAT,
+	STATUS_BIT_ALERT,
+	STATUS_BIT_EFUSE_PG
 } status_bits;
 
 #if CONFIG_ENABLE_HEATERS
@@ -102,6 +105,9 @@ static pack_t packs[NUM_PACKS] = {
 	 .line_dchg_stat = GPIO_DT_SPEC_GET_BY_IDX(BP_NODE, discharge_stat_oc_gpios, 0),
 	 .line_chg_stat = GPIO_DT_SPEC_GET_BY_IDX(BP_NODE, charge_stat_oc_gpios, 0),
 	 .line_alert = GPIO_DT_SPEC_GET_BY_IDX(BP_NODE, alert_gpios, 0),
+#if CONFIG_BOARD_ORESAT_MCXN947_BATTERY_CARD
+	 .efuse_pg_stat = GPIO_DT_SPEC_GET_BY_IDX(BP_NODE, efuse_pg_oc_gpios, 0),
+#endif
 	 .pack_number = 1,
 	 .name = "Pack 1"
 	},
@@ -112,6 +118,9 @@ static pack_t packs[NUM_PACKS] = {
 	 .line_dchg_stat = GPIO_DT_SPEC_GET_BY_IDX(BP_NODE, discharge_stat_oc_gpios, 1),
 	 .line_chg_stat = GPIO_DT_SPEC_GET_BY_IDX(BP_NODE, charge_stat_oc_gpios, 1),
 	 .line_alert = GPIO_DT_SPEC_GET_BY_IDX(BP_NODE, alert_gpios, 1),
+#if CONFIG_BOARD_ORESAT_MCXN947_BATTERY_CARD
+	 .efuse_pg_stat = GPIO_DT_SPEC_GET_BY_IDX(BP_NODE, efuse_pg_oc_gpios, 1),
+#endif
 	 .pack_number = 2,
 	 .name = "Pack 2"
 	}
@@ -171,7 +180,7 @@ static int general_gpios_init(void)
 
 #if CONFIG_BOARD_ORESAT_MCXN947_BATTERY_CARD
 
-	ret = gpio_pin_configure_dt(&can_fault, GPIO_INPUT);
+	ret = gpio_pin_configure_dt(&can_fault, GPIO_INPUT | GPIO_PULL_UP);
 	if (ret) {
 		err = ret;
 	}
@@ -251,6 +260,17 @@ static int pack_gpios_init(void)
 {
 	int ret;
 	int pack;
+	gpio_flags_t ltc4211_flags = 0;
+
+#if CONFIG_BOARD_ORESAT_MCXN947_BATTERY_CARD
+	// Board 4.0 did not have hardware pullups, so use the MCXN's.
+	// These, however, will be too strong to ever read as 0.
+	// Board 4.1+ has weaker pullups so the LTC4412 status signals should now
+	// work.
+	if (raw_board_rev == 0) {
+		ltc4211_flags |= GPIO_PULL_UP;
+	}
+#endif
 
 	for (pack = 0; pack < NUM_PACKS; pack++) {
 		ret = gpio_pin_configure_dt(&packs[pack].heater_on, GPIO_OUTPUT_INACTIVE);
@@ -265,11 +285,11 @@ static int pack_gpios_init(void)
 		if (ret) {
 			return ret;
 		}
-		ret = gpio_pin_configure_dt(&packs[pack].line_chg_stat, GPIO_INPUT | GPIO_PULL_UP);
+		ret = gpio_pin_configure_dt(&packs[pack].line_chg_stat, GPIO_INPUT | ltc4211_flags);
 		if (ret) {
 			return ret;
 		}
-		ret = gpio_pin_configure_dt(&packs[pack].line_dchg_stat, GPIO_INPUT | GPIO_PULL_UP);
+		ret = gpio_pin_configure_dt(&packs[pack].line_dchg_stat, GPIO_INPUT | ltc4211_flags);
 		if (ret) {
 			return ret;
 		}
@@ -277,6 +297,12 @@ static int pack_gpios_init(void)
 		if (ret) {
 			return ret;
 		}
+#if CONFIG_BOARD_ORESAT_MCXN947_BATTERY_CARD
+		ret = gpio_pin_configure_dt(&packs[pack].efuse_pg_stat, GPIO_INPUT);
+		if (ret) {
+			return ret;
+		}
+#endif
 	}
 	return 0;
 }
@@ -415,6 +441,11 @@ static void update_battery_charging_state(const pack_t *pack)
 	LOG_DBG("LINE_DCHG_STAT_PK%d = %u", pack->pack_number, gpio_pin_get_dt(&pack->line_dchg_stat));
 	LOG_DBG("LINE_CHG_STAT_PK%d  = %u", pack->pack_number, gpio_pin_get_dt(&pack->line_chg_stat));
 	LOG_DBG("LINE_ALERT_PK%d     = %u", pack->pack_number, gpio_pin_get_dt(&pack->line_alert));
+#if CONFIG_BOARD_ORESAT_MCXN947_BATTERY_CARD
+	if (raw_board_rev > 0) {
+		LOG_DBG("EFUSE_PG_STAT_PK%d = %u",  pack->pack_number, gpio_pin_get_dt(&pack->efuse_pg_stat));
+	}
+#endif
 
 #if CONFIG_ENABLE_CHARGING_CONTROL
 	const batt_pack_data_t * const pk_data = &pack->data;
@@ -630,21 +661,31 @@ static void populate_od_pack_data(pack_t *pack)
 	batt_pack_data_t *pack_data = &pack->data;
 	uint8_t state_bitmask = 0;
 
-	if( gpio_pin_get_dt(&pack->heater_on) ) {
+	if (gpio_pin_get_dt(&pack->heater_on)) {
 		state_bitmask |= (1 << STATUS_BIT_HEATER);
 	}
-	if( gpio_pin_get_dt(&pack->line_dchg_dis) ) {
+	if (gpio_pin_get_dt(&pack->line_dchg_dis)) {
 		state_bitmask |= (1 << STATUS_BIT_DCHG_DIS);
 	}
-	if (gpio_pin_get_dt(&pack->line_chg_dis) ) {
+	if (gpio_pin_get_dt(&pack->line_chg_dis)) {
 		state_bitmask |= (1 << STATUS_BIT_CHG_DIS);
 	}
-	if( gpio_pin_get_dt(&pack->line_dchg_stat) ) {
+	if (gpio_pin_get_dt(&pack->line_dchg_stat)) {
 		state_bitmask |= (1 << STATUS_BIT_DCHG_STAT);
 	}
-	if( gpio_pin_get_dt(&pack->line_chg_stat) ) {
+	if (gpio_pin_get_dt(&pack->line_chg_stat)) {
 		state_bitmask |= (1 << STATUS_BIT_CHG_STAT);
 	}
+	if (gpio_pin_get_dt(&pack->line_alert)) {
+		state_bitmask |= (1 << STATUS_BIT_ALERT);
+	}
+#if CONFIG_BOARD_ORESAT_MCXN947_BATTERY_CARD
+	if (raw_board_rev > 0) {
+		if (gpio_pin_get_dt(&pack->efuse_pg_stat)) {
+			state_bitmask |= (1 << STATUS_BIT_EFUSE_PG);
+		}
+	}
+#endif
 
 	CO_LOCK_OD();
 	if (pack->pack_number == 1) {
@@ -908,6 +949,17 @@ static void handle_batt(void *p1, void *p2, void *p3)
 		LOG_ERR("General GPIOs failed to init: %d", rc);
 	}
 
+#if CONFIG_BOARD_ORESAT_MCXN947_BATTERY_CARD
+	bool use_adc = false;
+
+	rc = init_adc();
+	if (rc) {
+		LOG_ERR("ADCs failed to init: %d", rc);
+	} else {
+		use_adc = true;
+	}
+#endif
+
 	k_sleep(K_MSEC(BATTERY_STARTUP_DELAY));
 
 	populate_od_versions();
@@ -1103,6 +1155,49 @@ static void handle_batt(void *p1, void *p2, void *p3)
 		}
 
 		LOG_INF("================================= loop %u, %u.%03u s", loop, (uint32_t)(ms / 1000), (uint32_t)(ms % 1000));
+#if CONFIG_BOARD_ORESAT_MCXN947_BATTERY_CARD
+#define MAX4211_RSENSE 0.1f
+#define EFUSE_K 243.0e-6f
+#define EFUSE_RIMON 470
+		int32_t max4211_iout_mV;
+		int32_t max4211_iout_mA;
+		int32_t efuse_imon_mV;
+		int32_t efuse_imon_mA;
+
+		if (use_adc) {
+			rc = acquire_adc_readings();
+			if (rc) {
+				LOG_ERR("Error acquiring ADC data: %d", rc);
+			} else {
+				// TODO: report these analog readings over CAN as appropriate. May need to modify the object dictionary.
+
+				// MAX4211 Iout
+				rc = read_adc(0, &max4211_iout_mV);
+				if (rc) {
+					LOG_ERR("Error reading adc 0: %d", rc);
+				} else {
+					max4211_iout_mA = max4211_iout_mV / MAX4211_RSENSE;
+					LOG_INF("MAX4211 Iout = %d mA, %d mV raw", max4211_iout_mA, max4211_iout_mV);
+				}
+				// eFuse Imon out (A) = Vimon / (Rimon * 243.0e-6)
+				rc = read_adc(1, &efuse_imon_mV);
+				if (rc) {
+					LOG_ERR("Error reading adc 1: %d", rc);
+				} else {
+					efuse_imon_mA = efuse_imon_mV / (EFUSE_RIMON * EFUSE_K);
+					LOG_INF("Pack 1: eFuse Imon = %d mA, %d mV raw", efuse_imon_mA, efuse_imon_mV);
+				}
+				// eFuse Imon out (A) = Vimon / (Rimon * 243.0e-6)
+				rc = read_adc(2, &efuse_imon_mV);
+				if (rc) {
+					LOG_ERR("Error reading adc 1: %d", rc);
+				} else {
+					efuse_imon_mA = efuse_imon_mV / (EFUSE_RIMON * EFUSE_K);
+					LOG_INF("Pack 2: eFuse Imon = %d mA, %d mV raw", efuse_imon_mA, efuse_imon_mV);
+				}
+			}
+		}
+#endif
 
 		(void)read_die_temp();
 		for (i = 0; i < NUM_PACKS; i++) {

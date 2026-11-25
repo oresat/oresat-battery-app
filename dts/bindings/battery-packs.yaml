@@ -17,6 +17,11 @@ properties:
       Alert inputs. Number of entries for this and the other gpios
       should match number of packs.
 
+  efuse-pg-oc-gpios:
+    type: phandle-array
+    description: |
+      eFuse power good status output
+
   charge-stat-oc-gpios:
     type: phandle-array
     description: |
